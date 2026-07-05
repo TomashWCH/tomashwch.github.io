@@ -60,6 +60,13 @@
 
   /* match */
   .match{background:var(--card);color:var(--ink);border-radius:14px;margin:12px 0;overflow:hidden}
+  .match.final-match{border:2px solid var(--gold);box-shadow:0 0 0 4px rgba(232,178,58,.18),0 8px 24px rgba(185,135,31,.35);position:relative}
+  .match.final-match::before{content:"🏆  WIELKI FINAŁ  🏆";display:block;text-align:center;background:linear-gradient(90deg,var(--gold-d),var(--gold),var(--gold-d));background-size:200% 100%;animation:finalShine 3s linear infinite;color:#241a05;font-family:Oswald;font-weight:700;letter-spacing:3px;font-size:13px;padding:8px 0}
+  @keyframes finalShine{0%{background-position:0% 0}100%{background-position:200% 0}}
+  .toggle-h{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+  .toggle-h .chev{color:var(--gold);font-size:13px;font-weight:600}
+  .admin-mrow-collapsed{cursor:pointer}
+  .admin-mrow-collapsed:active{opacity:.7}
   .m-top{display:flex;justify-content:space-between;align-items:center;
     padding:9px 14px;font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--muted);
     background:#F1EEE5;border-bottom:1px solid var(--line)}
@@ -281,6 +288,10 @@ let MC_DRAFT={};
 const REMO=['👍','🔥','😂','😮','👏'];
 let H2H_A=null, H2H_B=null;
 const EXP=new Set();
+let adminPartOpen=false;
+const adminExpMatches=new Set();
+function toggleAdminPart(){adminPartOpen=!adminPartOpen;render();}
+function toggleAdminMatch(mid){if(adminExpMatches.has(mid))adminExpMatches.delete(mid);else adminExpMatches.add(mid);render();}
 let FEED_OPEN=false;
 let TAB='mecze';
 let ME=localStorage.getItem('typer_pid')||null;
@@ -499,10 +510,11 @@ function matchCard(m){
   }else{
     picksHtml=`<div class="picks"><h4>Typy wszystkich</h4><div class="muted" style="font-size:13px">Widoczne po pierwszym gwizdku.</div>${matchComments(m.id)}</div>`;
   }
+  const isFinal=(m.stage||'')==='Finał';
   if(st==='done'){
     const open=EXP.has(m.id);
     const nPicks=Object.keys(PRED[m.id]||{}).length;
-    return `<div class="match">
+    return `<div class="match${isFinal?' final-match':''}">
       <div class="m-top" onclick="toggleExp('${m.id}')" style="cursor:pointer"><span class="stage">${esc(m.stage||'')}</span><span>${fmt(m.kickoff)} ${pill}</span></div>
       <div class="teams" onclick="toggleExp('${m.id}')" style="cursor:pointer">
         <div class="team"><span class="flag">${H.f}</span><span class="tname">${esc(H.pl)}</span></div>
@@ -513,7 +525,7 @@ function matchCard(m){
       <div style="text-align:center;padding:0 14px 12px"><button class="icon-btn" style="width:100%" onclick="toggleExp('${m.id}')">${open?'Ukryj typy ⌃':'Pokaż typy ('+nPicks+') ⌄'}</button></div>
       ${open?`${oddsHtml}${picksHtml}`:''}</div>`;
   }
-  return `<div class="match">
+  return `<div class="match${isFinal?' final-match':''}">
     <div class="m-top"><span class="stage">${esc(m.stage||'')}</span><span>${fmt(m.kickoff)} ${pill}</span></div>
     <div class="teams">
       <div class="team"><span class="flag">${H.f}</span><span class="tname">${esc(H.pl)}</span></div>
@@ -611,8 +623,19 @@ function renderAdmin(){
   const mlist=sortedMatches().map(m=>{
     const H=team(m.home).pl,A=team(m.away).pl,st=statusOf(m),ko=(m.stage||'')!=='Faza grupowa';
     const hasExt=(m.fhs!=null||m.ph!=null||m.adv);
+    const isFinal=(m.stage||'')==='Finał';
+    const openRow = !m.done || adminExpMatches.has(m.id);
+    if(!openRow){
+      // mecz z wynikiem — automatycznie zwinięty, klik rozwija do edycji
+      return `<div class="listitem admin-mrow-collapsed" onclick="toggleAdminMatch('${m.id}')">
+        <div class="g"><b>${isFinal?'🏆 ':''}${esc(H)} – ${esc(A)}</b>
+          <div class="muted">${esc(m.stage||'')} · ${fmt(m.kickoff)} · <b>${m.hs}:${m.as}</b>${m.fhs!=null?' (dogr. '+m.fhs+':'+m.fas+')':''}${m.ph!=null?' k.'+m.ph+':'+m.pa:''}${advTeam(m)?' · awans '+esc(team(advTeam(m)==='home'?m.home:m.away).pl):''}</div>
+        </div>
+        <span style="color:var(--gold);font-size:12px;white-space:nowrap">edytuj ⌄</span>
+      </div>`;
+    }
     return `<div class="listitem">
-      <div class="g"><b>${esc(H)} – ${esc(A)}</b>
+      <div class="g"><b>${isFinal?'🏆 ':''}${esc(H)} – ${esc(A)}</b>
         <div class="muted">${esc(m.stage||'')} · ${fmt(m.kickoff)} ${m.done?`· <b>${m.hs}:${m.as}</b>${m.fhs!=null?' (dogr. '+m.fhs+':'+m.fas+')':''}${m.ph!=null?' k.'+m.ph+':'+m.pa:''}${advTeam(m)?' · awans '+esc(team(advTeam(m)==='home'?m.home:m.away).pl):''}`:`· <span class="tag">${st==='open'?'otwarty':'czeka na wynik'}</span>`}</div>
         <div class="row2" style="margin-top:6px;max-width:230px">
           <input type="number" id="rh_${m.id}" placeholder="dom 90'" value="${m.done?m.hs:''}" style="padding:6px">
@@ -635,13 +658,14 @@ function renderAdmin(){
             <input type="number" id="pa_${m.id}" placeholder="karne goś" value="${m.pa!=null?m.pa:''}" style="padding:6px">
           </div>
           <button class="icon-btn mini" style="margin-top:6px" onclick="saveResult('${m.id}')">Zapisz dogrywkę/karne</button>
-        </div>`:''}</div>
+        </div>`:''}
+        ${m.done?`<button class="icon-btn mini" style="margin-top:6px" onclick="toggleAdminMatch('${m.id}')">Zwiń ⌃</button>`:''}</div>
       <button class="danger" onclick="delMatch('${m.id}')">Usuń</button>
     </div>`;}).join('');
 
   $('app').innerHTML=header(ex)+`<div class="wrap">
-    <div class="sec-h">Uczestnicy (${Object.keys(PART).length})</div>
-    <div class="card">${plist}
+    <div class="sec-h toggle-h" onclick="toggleAdminPart()"><span>Uczestnicy (${Object.keys(PART).length})</span><span class="chev">${adminPartOpen?'zwiń ⌃':'rozwiń ⌄'}</span></div>
+    ${adminPartOpen?`<div class="card">${plist}
       <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
         <label>Dodaj uczestnika</label>
         <input id="np_name" placeholder="Imię">
@@ -651,7 +675,7 @@ function renderAdmin(){
         </div>
         <button class="primary" onclick="addPart()">Dodaj</button>
       </div>
-    </div>
+    </div>`:''}
 
     <div class="sec-h">Mecze i wyniki</div>
     <div class="card">
@@ -663,7 +687,15 @@ function renderAdmin(){
         <label>Data i godzina (czas polski)</label>
         <input id="nm_dt" type="datetime-local">
         <label>Etap</label>
-        <input id="nm_stage" value="1/16 finału">
+        <select id="nm_stage">
+          <option value="Faza grupowa">Faza grupowa</option>
+          <option value="1/16 finału" selected>1/16 finału</option>
+          <option value="1/8 finału">1/8 finału</option>
+          <option value="1/4 finału">1/4 finału</option>
+          <option value="1/2 finału">1/2 finału</option>
+          <option value="Mecz o 3. miejsce">Mecz o 3. miejsce</option>
+          <option value="Finał">🏆 Finał</option>
+        </select>
         <button class="primary" onclick="addMatch()">Dodaj mecz</button>
         <div class="hint">Kurs policzy się sam z siły drużyn. Wynik wpiszesz po meczu.</div>
       </div>
