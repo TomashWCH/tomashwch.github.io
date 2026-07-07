@@ -198,9 +198,18 @@
   .msg-img{max-width:100%;border-radius:10px;margin-top:6px;display:block;cursor:pointer}
   .img-preview{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:95;display:flex;align-items:center;justify-content:center;cursor:pointer}
   .img-preview img{max-width:95vw;max-height:90vh;border-radius:8px}
-  /* Notyfikacje */
-  .notif-btn{background:transparent;border:1px solid #2C382F;color:#CDD3CC;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;position:relative}
-  .notif-btn.on{color:var(--gold);border-color:var(--gold-d)}
+  /* In-app banery */
+  .inapp-banner{position:fixed;top:0;left:0;right:0;max-width:560px;margin:0 auto;z-index:80;
+    display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:0 0 14px 14px;
+    font-size:13px;font-weight:500;line-height:1.4;box-shadow:0 4px 16px rgba(0,0,0,.4);
+    animation:slideDown .35s ease-out}
+  .inapp-banner.green{background:#1A4D2E;border-bottom:2px solid var(--green);color:#C8F0D8}
+  .inapp-banner.amber{background:#3D2A00;border-bottom:2px solid var(--gold);color:#FFE29A}
+  .inapp-banner-ic{font-size:20px;flex:none;margin-top:1px}
+  .inapp-banner-body{flex:1}
+  .inapp-banner-title{font-family:Oswald;font-weight:700;font-size:15px;letter-spacing:.3px;margin-bottom:2px}
+  .inapp-banner-x{flex:none;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:20px;cursor:pointer;padding:0 0 0 6px;line-height:1}
+  @keyframes slideDown{from{transform:translateY(-110%);opacity:0}to{transform:translateY(0);opacity:1}}
   .team-name-clk{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
   .msg .tm{font-size:10px;color:var(--muted);margin-top:3px;text-align:right}
   .chatbar{position:fixed;bottom:52px;left:0;right:0;max-width:560px;margin:0 auto;display:flex;gap:8px;padding:8px 12px;background:#101712;border-top:1px solid #25302A;z-index:25}
@@ -370,7 +379,7 @@ firebase.auth().onAuthStateChanged(u=>{ if(u&&!booted){booted=true; attach(); ma
 function attach(){
   db.ref('config').on('value',s=>{CFG=s.val()||{};render();});
   db.ref('participants').on('value',s=>{PART=s.val()||{};render();});
-  db.ref('matches').on('value',s=>{MATCH=s.val()||{};render();});
+  db.ref('matches').on('value',s=>{MATCH=s.val()||{};render();if(ME&&booted)notifCheck();});
   db.ref('predictions').on('value',s=>{PRED=s.val()||{};render();});
   db.ref('chat').on('value',s=>{CHAT=s.val()||{};render();});
   db.ref('meta').on('value',s=>{META=s.val()||{};render();});
@@ -484,7 +493,7 @@ function renderMain(){
   Object.keys(MC_DRAFT).forEach(mid=>{const el=$('mc_'+mid); if(el&&MC_DRAFT[mid])el.value=MC_DRAFT[mid];});
   // check podium & notif
   checkAndShowPodium();
-  if(notifEnabled()) notifCheck();
+  notifCheck();
 }
 
 function viewMatches(){
@@ -1215,74 +1224,70 @@ setInterval(()=>{
 },30000);
 
 /* ═══════════════════════════════════════════════════
-   FEATURE 1: POWIADOMIENIA PUSH
+   FEATURE 1: POWIADOMIENIA IN-APP
 ═══════════════════════════════════════════════════ */
-let NOTIF_ENABLED = false;
-let NOTIF_TRACKED_MATCHES = {}; // mid -> { resultSent, hour1Sent }
+const NOTIF_TRACKED = {}; // mid -> { resultSent, hour1Sent }
+let bannerQueue = [];
+let bannerActive = false;
 
-async function requestNotifications(){
-  if(!('Notification' in window)){alert('Ten telefon nie obsługuje powiadomień.');return;}
-  const perm = await Notification.requestPermission();
-  if(perm==='granted'){
-    NOTIF_ENABLED=true;
-    localStorage.setItem('typer_notif','1');
-    flash('Powiadomienia włączone 🔔');
-    scheduleNotifCheck();
-  } else {
-    flash('Brak zgody na powiadomienia');
-  }
+function inappBanner(icon, type, title, body, onTap){
+  // queue so multiple banners don't overlap
+  bannerQueue.push({icon,type,title,body,onTap});
+  if(!bannerActive) nextBanner();
 }
 
-function notifEnabled(){ return NOTIF_ENABLED || localStorage.getItem('typer_notif')==='1'; }
-
-function sendNotif(title, body, tag){
-  if(!notifEnabled())return;
-  if(Notification.permission!=='granted')return;
-  try{ new Notification(title,{body,icon:'',tag:tag||title,badge:'',silent:false}); }catch(e){}
+function nextBanner(){
+  if(!bannerQueue.length){ bannerActive=false; return; }
+  bannerActive=true;
+  const {icon,type,title,body,onTap}=bannerQueue.shift();
+  const el=document.createElement('div');
+  el.className=`inapp-banner ${type}`;
+  el.innerHTML=`
+    <div class="inapp-banner-ic">${icon}</div>
+    <div class="inapp-banner-body" style="cursor:${onTap?'pointer':'default'}" onclick="this.closest('.inapp-banner')._tap&&this.closest('.inapp-banner')._tap()">
+      <div class="inapp-banner-title">${esc(title)}</div>
+      <div>${esc(body)}</div>
+    </div>
+    <button class="inapp-banner-x" onclick="this.closest('.inapp-banner').remove();setTimeout(nextBanner,300)">×</button>`;
+  if(onTap) el._tap=onTap;
+  document.body.appendChild(el);
+  // auto-dismiss after 5s
+  setTimeout(()=>{ el.style.animation='slideDown .3s ease-out reverse'; setTimeout(()=>{el.remove();setTimeout(nextBanner,300);},280); }, 5000);
 }
-
-function scheduleNotifCheck(){
-  // Run every 60s
-  setInterval(notifCheck, 60000);
-  notifCheck();
-}
+window.nextBanner=nextBanner;
 
 function notifCheck(){
   if(!ME||!PART[ME])return;
   const now=Date.now();
   Object.entries(MATCH).forEach(([mid,m])=>{
-    if(!NOTIF_TRACKED_MATCHES[mid]) NOTIF_TRACKED_MATCHES[mid]={};
-    const t = NOTIF_TRACKED_MATCHES[mid];
+    if(!NOTIF_TRACKED[mid]) NOTIF_TRACKED[mid]={};
+    const t=NOTIF_TRACKED[mid];
     const H=team(m.home).pl, A=team(m.away).pl;
-    const myPred = PRED[mid]&&PRED[mid][ME];
-    const msToKick = m.kickoff - now;
+    const myPred=PRED[mid]&&PRED[mid][ME];
+    const msToKick=m.kickoff-now;
 
-    // ① Mecz zakończony — wynik wpisany
+    // ① Wynik wpisany przez admina
     if(m.done && !t.resultSent){
       t.resultSent=true;
-      const hit = myPred && Number(myPred.h)===Number(m.hs)&&Number(myPred.a)===Number(m.as);
-      const txt = hit ? `✅ Trafiłeś! ${H} ${m.hs}:${m.as} ${A}` : `🏁 Wynik: ${H} ${m.hs}:${m.as} ${A}${myPred?` (Twój typ: ${myPred.h}:${myPred.a})`:''}`;
-      sendNotif('Liga Typera — mecz zakończony', txt, 'result_'+mid);
+      const hit=myPred&&Number(myPred.h)===Number(m.hs)&&Number(myPred.a)===Number(m.as);
+      if(hit){
+        inappBanner('✅','green',`Trafiony wynik!`,`${H} ${m.hs}:${m.as} ${A} — dobry typ!`,()=>go('rozegrane'));
+      } else {
+        const typTxt=myPred?` Twój typ: ${myPred.h}:${myPred.a}.`:'';
+        inappBanner('🏁','amber','Mecz zakończony',`${H} ${m.hs}:${m.as} ${A}.${typTxt}`,()=>go('rozegrane'));
+      }
     }
 
-    // ② Godzinę przed meczem — jeśli nie obstawiony
+    // ② Godzinę przed meczem — brak typu
     if(!m.done && !myPred && msToKick>0 && msToKick<=60*60*1000 && !t.hour1Sent){
       t.hour1Sent=true;
-      sendNotif('⚠️ Liga Typera — za godzinę mecz!', `Nie obstawiłeś: ${H} vs ${A} — typ zamknie się za ~${Math.round(msToKick/60000)} min`, 'hour1_'+mid);
+      inappBanner('⚠️','amber','Nie obstawiłeś meczu!',`${H} vs ${A} — zostało ~${Math.round(msToKick/60000)} min`,()=>go('mecze'));
     }
   });
 }
 
-function notifBtnHtml(){
-  if(!('Notification' in window))return '';
-  const on = notifEnabled() && Notification.permission==='granted';
-  return `<button class="notif-btn ${on?'on':''}" onclick="requestNotifications()" title="${on?'Powiadomienia włączone':'Włącz powiadomienia'}">🔔</button>`;
-}
-
-// Auto-init if already granted
-if(localStorage.getItem('typer_notif')==='1' && typeof Notification!=='undefined' && Notification.permission==='granted'){
-  NOTIF_ENABLED=true; setTimeout(scheduleNotifCheck,3000);
-}
+// uruchamiaj co 60 sekund + od razu po załadowaniu danych
+function notifBtnHtml(){ return ''; } // usunięty dzwoneczek
 
 /* ═══════════════════════════════════════════════════
    FEATURE 2: ZDJĘCIA W CZACIE
