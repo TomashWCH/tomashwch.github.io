@@ -163,6 +163,45 @@
   .msg.me{align-self:flex-end;background:#FBF1D9}
   .msg .who{font-size:11px;font-weight:700;color:var(--gold-d);margin-bottom:2px}
   .msg .tx{font-size:14px;line-height:1.35;word-wrap:break-word;overflow-wrap:anywhere}
+  /* ── NOWE v4 ── */
+  /* Historia drużyny */
+  .team-hist-flag{font-size:32px;display:block;text-align:center;margin-bottom:4px}
+  .team-hist-name{font-family:Oswald;font-weight:700;font-size:22px;text-align:center;margin-bottom:14px}
+  .team-hist-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .team-hist-row:last-child{border-bottom:0}
+  .team-hist-score{font-family:Oswald;font-weight:700;font-size:18px;min-width:52px;text-align:center}
+  .team-hist-score.win{color:var(--green)} .team-hist-score.lose{color:var(--red)} .team-hist-score.draw{color:#A8ADA4}
+  .team-hist-opp{font-size:14px;font-weight:500;flex:1}
+  .team-hist-stage{font-size:11px;color:var(--muted)}
+  .team-hist-tips{font-size:12px;color:var(--muted);margin-top:2px}
+  /* Podium */
+  .podium-ovl{position:fixed;inset:0;z-index:90;background:linear-gradient(160deg,#0a1a0e,#0F1511);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:24px 16px 40px}
+  .podium-title{font-family:Oswald;font-weight:700;font-size:30px;letter-spacing:3px;color:var(--gold);text-align:center;margin-bottom:4px;text-transform:uppercase}
+  .podium-sub{font-size:12px;color:#9AA199;letter-spacing:2px;text-align:center;margin-bottom:28px}
+  .podium-stage{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin-bottom:24px;width:100%}
+  .podium-col{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .podium-avatar{font-size:36px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.4))}
+  .podium-pname{font-family:Oswald;font-weight:700;font-size:15px;text-align:center;color:#F2F0EA;max-width:90px;line-height:1.2}
+  .podium-pts{font-family:Oswald;font-weight:700;font-size:13px;color:var(--gold-d)}
+  .podium-plinth{border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:700;font-size:22px}
+  .podium-plinth.p1{width:96px;height:96px;background:linear-gradient(180deg,#e8c53a,#b9871f);color:#fff;box-shadow:0 0 28px rgba(232,178,58,.5)}
+  .podium-plinth.p2{width:82px;height:72px;background:linear-gradient(180deg,#b8c0cc,#8a929e);color:#fff}
+  .podium-plinth.p3{width:74px;height:52px;background:linear-gradient(180deg,#cc8f5c,#9a6038);color:#fff}
+  .podium-rest{width:100%;max-width:420px;background:rgba(255,255,255,.06);border-radius:14px;padding:4px 12px;margin-bottom:20px}
+  .podium-rest-row{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.07);gap:10px}
+  .podium-rest-row:last-child{border-bottom:0}
+  .podium-rest-rank{font-family:Oswald;font-weight:700;font-size:18px;color:#6A7268;width:26px;text-align:center}
+  .podium-rest-name{flex:1;font-weight:600;color:#CFD5CC;font-size:14px}
+  .podium-rest-pts{font-family:Oswald;font-weight:700;font-size:20px;color:var(--gold-d)}
+  .podium-close-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#CFD5CC;border-radius:10px;padding:10px 28px;font-family:Oswald;font-weight:600;font-size:15px;cursor:pointer;letter-spacing:1px}
+  /* Zdjęcia w czacie */
+  .msg-img{max-width:100%;border-radius:10px;margin-top:6px;display:block;cursor:pointer}
+  .img-preview{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:95;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .img-preview img{max-width:95vw;max-height:90vh;border-radius:8px}
+  /* Notyfikacje */
+  .notif-btn{background:transparent;border:1px solid #2C382F;color:#CDD3CC;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;position:relative}
+  .notif-btn.on{color:var(--gold);border-color:var(--gold-d)}
+  .team-name-clk{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
   .msg .tm{font-size:10px;color:var(--muted);margin-top:3px;text-align:right}
   .chatbar{position:fixed;bottom:52px;left:0;right:0;max-width:560px;margin:0 auto;display:flex;gap:8px;padding:8px 12px;background:#101712;border-top:1px solid #25302A;z-index:25}
   .chatbar input{flex:1;font-size:16px}
@@ -366,7 +405,7 @@ function render(){
 function header(extra){
   return `<div class="topbar">
     <div><div class="ttl">${esc(CFG.leagueName||'LIGA TYPERA')}<small>TYPER MUNDIAL 2026</small></div></div>
-    <div class="spacer"></div>${extra||''}</div>`;
+    <div class="spacer"></div>${notifBtnHtml()}${extra||''}</div>`;
 }
 
 function renderFirstRun(){
@@ -443,6 +482,9 @@ function renderMain(){
   tabbar();
   if(TAB==='czat'){ const ci=$('chatin'); if(ci){ci.value=CHAT_DRAFT;} window.scrollTo(0,document.body.scrollHeight); }
   Object.keys(MC_DRAFT).forEach(mid=>{const el=$('mc_'+mid); if(el&&MC_DRAFT[mid])el.value=MC_DRAFT[mid];});
+  // check podium & notif
+  checkAndShowPodium();
+  if(notifEnabled()) notifCheck();
 }
 
 function viewMatches(){
@@ -517,9 +559,9 @@ function matchCard(m){
     return `<div class="match${isFinal?' final-match':''}">
       <div class="m-top" onclick="toggleExp('${m.id}')" style="cursor:pointer"><span class="stage">${esc(m.stage||'')}</span><span>${fmt(m.kickoff)} ${pill}</span></div>
       <div class="teams" onclick="toggleExp('${m.id}')" style="cursor:pointer">
-        <div class="team"><span class="flag">${H.f}</span><span class="tname">${esc(H.pl)}</span></div>
+        <div class="team"><span class="flag" onclick="showTeamHistory('${m.home}')" style="cursor:pointer">${H.f}</span><span class="tname team-name-clk" onclick="showTeamHistory('${m.home}')">${esc(H.pl)}</span></div>
         ${sc}
-        <div class="team away"><span class="tname">${esc(A.pl)}</span><span class="flag">${A.f}</span></div>
+        <div class="team away"><span class="tname team-name-clk" onclick="showTeamHistory('${m.away}')">${esc(A.pl)}</span><span class="flag" onclick="showTeamHistory('${m.away}')" style="cursor:pointer">${A.f}</span></div>
       </div>
       ${resultNote(m)}
       <div style="text-align:center;padding:0 14px 12px"><button class="icon-btn" style="width:100%" onclick="toggleExp('${m.id}')">${open?'Ukryj typy ⌃':'Pokaż typy ('+nPicks+') ⌄'}</button></div>
@@ -574,8 +616,10 @@ function viewTable(){
         <div class="lb-sub">start ${r.start} · trafienia ${r.correct}</div></div>
       <div class="pts">${r.total}<small>PKT</small></div>
     </div>`).join('');
+  const finalDone=Object.values(MATCH).some(m=>(m.stage||'')==='Finał'&&m.done);
+  const podiumBtn=finalDone?`<button class="primary" style="margin-top:8px" onclick="showPodium()">🏆 Pokaż podium końcowe</button>`:'';
   return `<div class="sec-h">Klasyfikacja</div><div class="lb">${rows}</div>
-    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>`;
+    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}`;
 }
 function kicktippStandings(){
   return Object.entries(PART).map(([pid,p])=>{
@@ -883,11 +927,14 @@ function viewChat(){
   const msgs=Object.entries(CHAT).map(([id,m])=>({id,...m})).sort((a,b)=>a.ts-b.ts).slice(-150);
   const list=msgs.length? msgs.map(m=>{
     const mine=m.pid===ME;
-    return `<div class="msg ${mine?'me':''}">${mine?'':`<div class="who">${esc(m.name)}</div>`}<div class="tx">${esc(m.text)}</div><div class="tm">${fmtClock(m.ts)}</div>${chatReactHtml(m.id,m)}</div>`;
+    const imgHtml=m.img?`<img class="msg-img" src="${m.img}" onclick="viewImgFull(this.src)" loading="lazy">`:'' ;
+    const txtHtml=m.text?`<div class="tx">${esc(m.text)}</div>`:'';
+    return `<div class="msg ${mine?'me':''}">${mine?'':`<div class="who">${esc(m.name)}</div>`}${txtHtml}${imgHtml}<div class="tm">${fmtClock(m.ts)}</div>${chatReactHtml(m.id,m)}</div>`;
   }).join('') : `<div class="card center muted">Cisza w eterze — zacznij pierwszy. 🎙️</div>`;
   return `<div class="sec-h">Czat ligi</div>
     <div class="chat" id="chatlist" style="margin-bottom:60px">${list}</div>
     <div class="chatbar">
+      <button onclick="openImgPicker()" style="flex:none;width:42px;border:0;border-radius:10px;background:#1E2E22;color:#CDD3CC;font-size:20px;cursor:pointer" title="Wyślij zdjęcie">📷</button>
       <input id="chatin" maxlength="300" placeholder="Napisz wiadomość…" oninput="CHAT_DRAFT=this.value" onkeydown="if(event.key==='Enter')sendChat()">
       <button onclick="sendChat()">➤</button>
     </div>`;
@@ -1166,6 +1213,275 @@ setInterval(()=>{
   if(!typing && !ADMIN && ME && PART[ME] && TAB==='mecze'){ render(); return; }
   document.querySelectorAll('[data-kick]').forEach(el=>{el.textContent=fmtCountdown(Number(el.dataset.kick)-Date.now());});
 },30000);
+
+/* ═══════════════════════════════════════════════════
+   FEATURE 1: POWIADOMIENIA PUSH
+═══════════════════════════════════════════════════ */
+let NOTIF_ENABLED = false;
+let NOTIF_TRACKED_MATCHES = {}; // mid -> { resultSent, hour1Sent }
+
+async function requestNotifications(){
+  if(!('Notification' in window)){alert('Ten telefon nie obsługuje powiadomień.');return;}
+  const perm = await Notification.requestPermission();
+  if(perm==='granted'){
+    NOTIF_ENABLED=true;
+    localStorage.setItem('typer_notif','1');
+    flash('Powiadomienia włączone 🔔');
+    scheduleNotifCheck();
+  } else {
+    flash('Brak zgody na powiadomienia');
+  }
+}
+
+function notifEnabled(){ return NOTIF_ENABLED || localStorage.getItem('typer_notif')==='1'; }
+
+function sendNotif(title, body, tag){
+  if(!notifEnabled())return;
+  if(Notification.permission!=='granted')return;
+  try{ new Notification(title,{body,icon:'',tag:tag||title,badge:'',silent:false}); }catch(e){}
+}
+
+function scheduleNotifCheck(){
+  // Run every 60s
+  setInterval(notifCheck, 60000);
+  notifCheck();
+}
+
+function notifCheck(){
+  if(!ME||!PART[ME])return;
+  const now=Date.now();
+  Object.entries(MATCH).forEach(([mid,m])=>{
+    if(!NOTIF_TRACKED_MATCHES[mid]) NOTIF_TRACKED_MATCHES[mid]={};
+    const t = NOTIF_TRACKED_MATCHES[mid];
+    const H=team(m.home).pl, A=team(m.away).pl;
+    const myPred = PRED[mid]&&PRED[mid][ME];
+    const msToKick = m.kickoff - now;
+
+    // ① Mecz zakończony — wynik wpisany
+    if(m.done && !t.resultSent){
+      t.resultSent=true;
+      const hit = myPred && Number(myPred.h)===Number(m.hs)&&Number(myPred.a)===Number(m.as);
+      const txt = hit ? `✅ Trafiłeś! ${H} ${m.hs}:${m.as} ${A}` : `🏁 Wynik: ${H} ${m.hs}:${m.as} ${A}${myPred?` (Twój typ: ${myPred.h}:${myPred.a})`:''}`;
+      sendNotif('Liga Typera — mecz zakończony', txt, 'result_'+mid);
+    }
+
+    // ② Godzinę przed meczem — jeśli nie obstawiony
+    if(!m.done && !myPred && msToKick>0 && msToKick<=60*60*1000 && !t.hour1Sent){
+      t.hour1Sent=true;
+      sendNotif('⚠️ Liga Typera — za godzinę mecz!', `Nie obstawiłeś: ${H} vs ${A} — typ zamknie się za ~${Math.round(msToKick/60000)} min`, 'hour1_'+mid);
+    }
+  });
+}
+
+function notifBtnHtml(){
+  if(!('Notification' in window))return '';
+  const on = notifEnabled() && Notification.permission==='granted';
+  return `<button class="notif-btn ${on?'on':''}" onclick="requestNotifications()" title="${on?'Powiadomienia włączone':'Włącz powiadomienia'}">🔔</button>`;
+}
+
+// Auto-init if already granted
+if(localStorage.getItem('typer_notif')==='1' && typeof Notification!=='undefined' && Notification.permission==='granted'){
+  NOTIF_ENABLED=true; setTimeout(scheduleNotifCheck,3000);
+}
+
+/* ═══════════════════════════════════════════════════
+   FEATURE 2: ZDJĘCIA W CZACIE
+═══════════════════════════════════════════════════ */
+const MAX_IMG_KB = 400; // kompresja do max ~400KB base64
+
+function openImgPicker(){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.capture='environment';
+  inp.onchange=e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const orig=ev.target.result;
+      compressImg(orig, MAX_IMG_KB, (compressed)=>{
+        if(!confirm('Wysłać zdjęcie na czat?'))return;
+        db.ref('chat').push({pid:ME,name:PART[ME].name,img:compressed,ts:Date.now()})
+          .catch(()=>alert('Nie wysłano — za duże lub brak internetu.'));
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+  inp.click();
+}
+
+function compressImg(dataUrl, maxKB, cb){
+  const img=new Image();
+  img.onload=()=>{
+    let w=img.width, h=img.height;
+    const maxPx=1200;
+    if(w>maxPx||h>maxPx){ const r=Math.min(maxPx/w,maxPx/h); w=Math.round(w*r); h=Math.round(h*r); }
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    let q=0.82;
+    let out=c.toDataURL('image/jpeg',q);
+    while(out.length>maxKB*1024*1.37 && q>0.3){ q-=0.08; out=c.toDataURL('image/jpeg',q); }
+    cb(out);
+  };
+  img.src=dataUrl;
+}
+
+function viewImgFull(src){
+  const ov=document.createElement('div');
+  ov.className='img-preview';
+  ov.innerHTML=`<img src="${src}" onclick="event.stopPropagation()">`;
+  ov.onclick=()=>ov.remove();
+  document.body.appendChild(ov);
+}
+
+/* ═══════════════════════════════════════════════════
+   FEATURE 3: HISTORIA DRUŻYNY
+═══════════════════════════════════════════════════ */
+function showTeamHistory(code){
+  const t=team(code);
+  const played=sortedMatches().filter(m=>m.done&&(m.home===code||m.away===code));
+
+  if(!played.length){
+    const ov=document.createElement('div');
+    ov.className='ovl'; ov.onclick=e=>{if(e.target===ov)ov.remove();};
+    ov.innerHTML=`<div class="sheet"><button class="x" onclick="this.closest('.ovl').remove()">Zamknij</button>
+      <span class="team-hist-flag">${t.f}</span><div class="team-hist-name">${esc(t.pl)}</div>
+      <div class="muted" style="text-align:center;font-size:13px">Brak rozegranych meczów jeszcze.</div>
+    </div>`;
+    document.body.appendChild(ov); return;
+  }
+
+  let w=0,d=0,l=0,gf=0,ga=0;
+  const rows=played.map(m=>{
+    const isHome=m.home===code;
+    const opp=isHome?m.away:m.home;
+    const myG=isHome?Number(m.hs):Number(m.as);
+    const opG=isHome?Number(m.as):Number(m.hs);
+    gf+=myG; ga+=opG;
+    let res, cls;
+    if(myG>opG){res='W';cls='win';w++;}
+    else if(myG<opG){res='P';cls='lose';l++;}
+    else{res='R';cls='draw';d++;}
+
+    // collect tips for this match
+    const tipRows=Object.entries(PRED[m.id]||{}).map(([pid,pr])=>{
+      if(!PART[pid])return '';
+      const hit=Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as);
+      return `${esc(PART[pid].name)}: ${pr.h}:${pr.a}${hit?' ✓':''}`;
+    }).filter(Boolean).join(' · ');
+
+    return `<div class="team-hist-row">
+      <div>
+        <div style="font-size:10px;color:var(--muted)">${esc(m.stage||'')} · ${fmt(m.kickoff)}</div>
+        <div class="team-hist-opp">${isHome?'vs':'@'} ${esc(team(opp).f)} ${esc(team(opp).pl)}</div>
+        ${tipRows?`<div class="team-hist-tips">Typy: ${tipRows}</div>`:''}
+      </div>
+      <div style="text-align:right">
+        <div class="team-hist-score ${cls}">${myG}:${opG}</div>
+        <div style="font-size:11px;color:var(--muted)">${res}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const ov=document.createElement('div');
+  ov.className='ovl'; ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="sheet">
+    <button class="x" onclick="this.closest('.ovl').remove()">Zamknij</button>
+    <span class="team-hist-flag">${t.f}</span>
+    <div class="team-hist-name">${esc(t.pl)}</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">
+      <div class="box" style="background:#EAF4EE;padding:8px 14px;border-radius:10px;text-align:center"><b style="font-family:Oswald;font-size:20px;color:var(--green)">${w}</b><div style="font-size:10px;color:var(--muted)">WYGRANE</div></div>
+      <div class="box" style="background:#F4F1E8;padding:8px 14px;border-radius:10px;text-align:center"><b style="font-family:Oswald;font-size:20px">${d}</b><div style="font-size:10px;color:var(--muted)">REMISY</div></div>
+      <div class="box" style="background:#FBE9E7;padding:8px 14px;border-radius:10px;text-align:center"><b style="font-family:Oswald;font-size:20px;color:var(--red)">${l}</b><div style="font-size:10px;color:var(--muted)">PORAŻKI</div></div>
+      <div class="box" style="background:#F4F1E8;padding:8px 14px;border-radius:10px;text-align:center"><b style="font-family:Oswald;font-size:20px">${gf}:${ga}</b><div style="font-size:10px;color:var(--muted)">BRAMKI</div></div>
+    </div>
+    <div class="team-hist-list">${rows}</div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+window.showTeamHistory=showTeamHistory;
+
+/* ═══════════════════════════════════════════════════
+   FEATURE 4: PODIUM KOŃCOWE
+═══════════════════════════════════════════════════ */
+function checkAndShowPodium(){
+  if(!ME||!PART[ME])return;
+  const allMatches=Object.values(MATCH);
+  if(!allMatches.length)return;
+  const hasFinal=allMatches.some(m=>(m.stage||'')==='Finał');
+  const finalDone=allMatches.some(m=>(m.stage||'')==='Finał'&&m.done);
+  if(!hasFinal||!finalDone)return;
+  // Show podium automatically once per session after final
+  const seenKey='typer_podium_'+firebaseConfig.projectId;
+  if(sessionStorage.getItem(seenKey))return;
+  sessionStorage.setItem(seenKey,'1');
+  setTimeout(showPodium,800);
+}
+
+function showPodium(){
+  const s=standings();
+  if(!s.length)return;
+  const medals=['🥇','🥈','🥉'];
+  const emojis=['🏆','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'];
+  const top3=s.slice(0,3);
+  const rest=s.slice(3);
+  // Podium layout: 2nd, 1st, 3rd
+  const order=[top3[1],top3[0],top3[2]].filter(Boolean);
+  const heights=['p2','p1','p3'];
+  const ordH=['p2','p1','p3'];
+  const nums=['🥈','🥇','🥉'];
+
+  const podiumCols=order.map((r,i)=>{
+    const cls=ordH[i];
+    const medal=nums[i];
+    return `<div class="podium-col">
+      <div class="podium-avatar">${medals[s.indexOf(r)]||emojis[s.indexOf(r)]||'⚽'}</div>
+      <div class="podium-pname">${esc(r.name)}</div>
+      <div class="podium-pts">${r.total} pkt</div>
+      <div class="podium-plinth ${cls}">${medal}</div>
+    </div>`;
+  }).join('');
+
+  const restRows=rest.map((r,i)=>`
+    <div class="podium-rest-row">
+      <div class="podium-rest-rank">${i+4}.</div>
+      <div class="podium-rest-name">${esc(r.name)}</div>
+      <div class="podium-rest-pts">${r.total}<span style="font-size:11px;color:#6A7268"> pkt</span></div>
+    </div>`).join('');
+
+  const totalDone=Object.values(MATCH).filter(m=>m.done).length;
+  const topPred=s[0];
+  const topExact=topPred?topPred.correct:0;
+
+  const ov=document.createElement('div');
+  ov.className='podium-ovl';
+  ov.id='podiumScreen';
+  ov.innerHTML=`
+    <div class="podium-title">🏆 LIGA TYPERA</div>
+    <div class="podium-sub">FINAŁ · MŚ 2026 · JYSK P258</div>
+    <div style="font-size:36px;margin-bottom:16px;animation:confettiBounce .6s ease-in-out infinite alternate">🎉</div>
+
+    <div class="podium-stage">${podiumCols}</div>
+
+    ${rest.length?`<div class="podium-rest">${restRows}</div>`:''}
+
+    <div style="background:rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;width:100%;max-width:420px;margin-bottom:20px">
+      <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:#9AA199;margin-bottom:8px">STATYSTYKI TURNIEJU</div>
+      <div style="font-size:14px;color:#CFD5CC;line-height:1.8">
+        🎯 Rozegrano meczów: <b>${totalDone}</b><br>
+        🏅 Zwycięzca ligi: <b>${esc(s[0]&&s[0].name||'—')}</b> z <b>${s[0]&&s[0].total||0} pkt</b><br>
+        ⚡ Dokładnych trafień: <b>${topExact}</b>
+      </div>
+    </div>
+
+    <button class="podium-close-btn" onclick="closePodium()">Zamknij podium</button>
+
+    <style>@keyframes confettiBounce{from{transform:scale(1)}to{transform:scale(1.15)}}</style>
+  `;
+  document.body.appendChild(ov);
+}
+
+function closePodium(){const p=document.getElementById('podiumScreen');if(p)p.remove();}
+window.closePodium=closePodium;
+window.showPodium=showPodium;
 </script>
 </body>
 </html>
