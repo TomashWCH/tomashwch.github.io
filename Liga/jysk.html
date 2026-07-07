@@ -1204,11 +1204,73 @@ function badgesRoster(){
   }).join('');
   return `<div class="card">${rows}<div class="hint" style="margin-top:8px">Stuknij gracza, by zobaczyć opisy odznak.</div></div>`;
 }
+function statBlizniacza(){
+  if(!ME||!PART[ME])return '<div class="card muted">Zaloguj się, by zobaczyć swój bliźniak.</div>';
+  const sims=Object.keys(PART).filter(p=>p!==ME).map(pid=>{
+    let common=0,score=0;
+    Object.values(PRED).forEach(obj=>{const a=obj[ME],b=obj[pid];if(!a||!b)return;common++;
+      if(Number(a.h)===Number(b.h)&&Number(a.a)===Number(b.a))score+=1;
+      else if(Math.sign(Number(a.h)-Number(a.a))===Math.sign(Number(b.h)-Number(b.a)))score+=0.5;});
+    return {name:PART[pid].name,common,sim:common?score/common:0};
+  }).filter(x=>x.common>=3);
+  if(!sims.length)return '<div class="card muted">Za mało wspólnych typów (potrzeba kilku), żeby to policzyć.</div>';
+  sims.sort((a,b)=>b.sim-a.sim);
+  const twin=sims[0], nem=sims[sims.length-1];
+  const c=(e,label,x)=>`<div class="spot"><div class="spot-e">${e}</div><div><div class="spot-t">${label}</div><div class="spot-v"><b>${esc(x.name)}</b> — zgodność ${Math.round(x.sim*100)}%</div><div class="spot-s">na ${x.common} wspólnych typach</div></div></div>`;
+  let out=c('👯','Dusza bliźniacza',twin);
+  if(sims.length>1 && nem.name!==twin.name) out+=c('😈','Nemezis',nem);
+  return out;
+}
+function statOdwaga(){
+  const done=sortedMatches().filter(m=>m.done);
+  const acc={}; Object.keys(PART).forEach(pid=>acc[pid]={name:PART[pid].name,brave:0,braveHit:0});
+  done.forEach(m=>{
+    const preds=Object.entries(PRED[m.id]||{}).filter(([pid])=>PART[pid]);
+    if(preds.length<2)return;
+    const cnt={'-1':0,'0':0,'1':0};
+    preds.forEach(([pid,pr])=>{cnt[String(Math.sign(Number(pr.h)-Number(pr.a)))]++;});
+    let maj='0',mx=-1;['1','0','-1'].forEach(k=>{if(cnt[k]>mx){mx=cnt[k];maj=k;}});
+    const actual=String(Math.sign(Number(m.hs)-Number(m.as)));
+    preds.forEach(([pid,pr])=>{const t=String(Math.sign(Number(pr.h)-Number(pr.a)));if(t!==maj){acc[pid].brave++;if(t===actual)acc[pid].braveHit++;}});
+  });
+  const rows=Object.values(acc).sort((a,b)=>b.brave-a.brave||b.braveHit-a.braveHit);
+  if(!rows.some(r=>r.brave>0))return '<div class="card muted">Na razie wszyscy typują podobnie — brak danych o odwadze.</div>';
+  return `<div class="card">`+rows.map((r,i)=>`<div class="prow"><span class="nm">${i===0?'🦁 ':''}${esc(r.name)}</span><span class="pv">${r.brave} <span class="muted" style="font-weight:400;font-size:11px">pod prąd · ${r.braveHit} trafione</span></span></div>`).join('')+`<div class="hint" style="margin-top:8px">Ile razy ktoś typował inaczej niż większość — i ile z tego trafił (tłum się mylił, on nie).</div></div>`;
+}
+function statFazy(){
+  const done=sortedMatches().filter(m=>m.done);
+  if(!done.length)return '<div class="card muted">Brak danych.</div>';
+  const rows=Object.entries(PART).map(([pid,p])=>{
+    let gp=0,gh=0,kp=0,kh=0;
+    done.forEach(m=>{const pr=PRED[m.id]&&PRED[m.id][pid];if(!pr)return;
+      const ex=Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as);
+      if((m.stage||'')==='Faza grupowa'){gp++;if(ex)gh++;}else{kp++;if(ex)kh++;}});
+    return {name:p.name,gp,gh,kp,kh,kPct:kp?kh/kp:0};
+  }).sort((a,b)=>b.kPct-a.kPct);
+  const cell=(h,n)=>n?`${Math.round(h/n*100)}% <span class="muted" style="font-weight:400;font-size:10px">(${h}/${n})</span>`:'<span class="muted">—</span>';
+  return `<div class="card">
+    <div class="prow" style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700"><span class="nm">Gracz</span><span style="display:flex;gap:12px"><span style="width:72px;text-align:right">Grupa</span><span style="width:72px;text-align:right">Puchary</span></span></div>
+    ${rows.map(r=>`<div class="prow"><span class="nm">${esc(r.name)}</span><span style="display:flex;gap:12px;font-size:13px"><span style="width:72px;text-align:right">${cell(r.gh,r.gp)}</span><span style="width:72px;text-align:right">${cell(r.kh,r.kp)}</span></span></div>`).join('')}
+    <div class="hint" style="margin-top:8px">Skuteczność dokładnych trafień: faza grupowa vs puchary (sortowane po pucharach).</div></div>`;
+}
+function statFrekwencja(){
+  const done=sortedMatches().filter(m=>m.done);
+  if(!done.length)return '<div class="card muted">Brak danych.</div>';
+  const rows=Object.entries(PART).map(([pid,p])=>{
+    const n=done.filter(m=>PRED[m.id]&&PRED[m.id][pid]).length;
+    return {name:p.name,n,pct:Math.round(n/done.length*100)};
+  }).sort((a,b)=>b.pct-a.pct||b.n-a.n);
+  return `<div class="card">`+rows.map((r,i)=>`<div class="prow"><span class="nm">${i===0?'🎯 ':''}${esc(r.name)}</span><span class="pv">${r.pct}% <span class="muted" style="font-weight:400;font-size:11px">(${r.n}/${done.length})</span></span></div>`).join('')+`<div class="hint" style="margin-top:8px">Ile rozegranych meczów ktoś obstawił — kto typuje najregularniej.</div></div>`;
+}
 function viewStaty(){
   if(!Object.keys(PART).length)return '<div class="card center muted">Brak uczestników.</div>';
   if(!sortedMatches().some(m=>m.done))return '<div class="card center muted">Statystyki pojawią się po pierwszych wynikach.</div>';
   return `<div class="sec-h">Raport po rundzie</div>`+roundReportCard()
+    +`<div class="sec-h">Twój bliźniak i nemezis</div>`+statBlizniacza()
     +`<div class="sec-h">Pojedynek graczy</div>`+h2hCard()
+    +`<div class="sec-h">Ranking odwagi</div>`+statOdwaga()
+    +`<div class="sec-h">Skuteczność w fazach</div>`+statFazy()
+    +`<div class="sec-h">Frekwencja</div>`+statFrekwencja()
     +`<div class="sec-h">Pozycje w czasie</div>`+positionChartCard()
     +`<div class="sec-h">Odznaki</div>`+badgesRoster()
     +`<div class="sec-h">Statystyki ligi</div>`+statsCards();
