@@ -1291,7 +1291,7 @@ const MAX_IMG_KB = 400; // kompresja do max ~400KB base64
 
 function openImgPicker(){
   const inp=document.createElement('input');
-  inp.type='file'; inp.accept='image/*'; inp.capture='environment';
+  inp.type='file'; inp.accept='image/*';
   inp.onchange=e=>{
     const file=e.target.files[0]; if(!file)return;
     const reader=new FileReader();
