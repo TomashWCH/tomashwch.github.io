@@ -336,6 +336,7 @@ let MC_DRAFT={};
 const REMO=['👍','🔥','😂','😮','👏'];
 let H2H_A=null, H2H_B=null;
 const EXP=new Set();
+const PHASE_EXP=new Set();
 let adminPartOpen=false;
 const adminExpMatches=new Set();
 function toggleAdminPart(){adminPartOpen=!adminPartOpen;render();}
@@ -509,9 +510,27 @@ function viewMatches(){
   return h;
 }
 function viewDone(){
-  const done=sortedMatches().filter(m=>statusOf(m)==='done').reverse();
+  const all=sortedMatches();
+  const done=all.filter(m=>statusOf(m)==='done');
   if(!done.length)return `<div class="card center muted">Nie ma jeszcze meczów z wpisanym wynikiem.</div>`;
-  return `<div class="sec-h">Rozegrane</div>`+done.map(matchCard).join('');
+  const notDone=all.filter(m=>statusOf(m)!=='done');
+  const currentStage = notDone.length ? notDone[0].stage : done[done.length-1].stage;
+  const groups={};
+  done.forEach(m=>{ const k=m.stage||'—'; (groups[k]=groups[k]||[]).push(m); });
+  const stages=Object.keys(groups).sort((a,b)=> Math.max.apply(null,groups[b].map(m=>m.kickoff)) - Math.max.apply(null,groups[a].map(m=>m.kickoff)));
+  let html='';
+  stages.forEach(st=>{
+    const ms=groups[st].slice().reverse();
+    if(st===currentStage){
+      html += `<div class="sec-h" style="color:var(--gold)">${esc(st)} · trwa</div>` + ms.map(matchCard).join('');
+    } else {
+      const open=PHASE_EXP.has(st);
+      const key=st.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      html += `<div class="sec-h toggle-h" onclick="togglePhase('${key}')"><span>${esc(st)} (${ms.length})</span><span class="chev">${open?'zwiń ⌃':'rozwiń ⌄'}</span></div>`;
+      if(open) html += ms.map(matchCard).join('');
+    }
+  });
+  return html;
 }
 
 function matchCard(m){
@@ -586,6 +605,7 @@ function matchCard(m){
     ${resultNote(m)}${oddsHtml}${pickArea}${picksHtml}</div>`;
 }
 function toggleExp(mid){ if(EXP.has(mid))EXP.delete(mid); else EXP.add(mid); render(); }
+function togglePhase(st){ if(PHASE_EXP.has(st))PHASE_EXP.delete(st); else PHASE_EXP.add(st); render(); }
 function toggleAdminExt(mid){ const e=$('ext_'+mid); if(e)e.style.display=(e.style.display==='none'?'block':'none'); }
 function advTeam(m){
   if(m.adv)return m.adv;
