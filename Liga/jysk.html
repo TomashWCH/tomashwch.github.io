@@ -953,10 +953,13 @@ function sendMatchComment(mid){
 
 /* ---------- v2: chat ---------- */
 function viewChat(){
-  const msgs=Object.entries(CHAT).map(([id,m])=>({id,...m})).sort((a,b)=>a.ts-b.ts).slice(-150);
+  const validImg=m=>m.img&&typeof m.img==='string'&&m.img.indexOf('data:image')===0&&m.img.length>200;
+  const msgs=Object.entries(CHAT).map(([id,m])=>({id,...m}))
+    .filter(m=> (m.text&&String(m.text).trim()) || validImg(m) )
+    .sort((a,b)=>a.ts-b.ts).slice(-150);
   const list=msgs.length? msgs.map(m=>{
     const mine=m.pid===ME;
-    const imgHtml=m.img?`<img class="msg-img" src="${m.img}" onclick="viewImgFull(this.src)" loading="lazy">`:'' ;
+    const imgHtml=validImg(m)?`<img class="msg-img" src="${m.img}" onclick="viewImgFull(this.src)" loading="lazy">`:'' ;
     const txtHtml=m.text?`<div class="tx">${esc(m.text)}</div>`:'';
     return `<div class="msg ${mine?'me':''}">${mine?'':`<div class="who">${esc(m.name)}</div>`}${txtHtml}${imgHtml}<div class="tm">${fmtClock(m.ts)}</div>${chatReactHtml(m.id,m)}</div>`;
   }).join('') : `<div class="card center muted">Cisza w eterze — zacznij pierwszy. 🎙️</div>`;
@@ -1393,25 +1396,32 @@ function openImgPicker(){
   const inp=document.createElement('input');
   inp.type='file'; inp.accept='image/*';
   inp.onchange=e=>{
-    const file=e.target.files[0]; if(!file)return;
+    const file=e.target.files&&e.target.files[0]; if(!file)return;
+    if(!file.type||file.type.indexOf('image/')!==0){ alert('To nie jest zdjęcie. Wybierz obrazek z galerii telefonu.'); return; }
+    if(!file.size){ alert('Nie udało się wczytać pliku (wygląda na to, że jest w chmurze, a nie na telefonie).\n\nWybierz zdjęcie z GALERII/ZDJĘĆ, a nie z Dysku Google — albo najpierw pobierz je na telefon.'); return; }
     const reader=new FileReader();
+    reader.onerror=()=>alert('Nie udało się odczytać pliku. Spróbuj innego zdjęcia z galerii (nie z chmury).');
     reader.onload=ev=>{
       const orig=ev.target.result;
+      if(!orig || String(orig).length<100){ alert('Puste zdjęcie — nic nie wysłano. Spróbuj innego pliku.'); return; }
       compressImg(orig, MAX_IMG_KB, (compressed)=>{
+        if(!compressed || compressed.indexOf('data:image')!==0 || compressed.length<200){ alert('Nie udało się przetworzyć zdjęcia. Możliwe, że jest w formacie HEIC (z iPhone\u2019a) — zrób zrzut ekranu tego zdjęcia i wyślij zrzut, albo wybierz inne.'); return; }
         if(!confirm('Wysłać zdjęcie na czat?'))return;
         db.ref('chat').push({pid:ME,name:PART[ME].name,img:compressed,ts:Date.now()})
           .catch(()=>alert('Nie wysłano — za duże lub brak internetu.'));
-      });
+      }, ()=>alert('Nie udało się wczytać zdjęcia (może format HEIC lub uszkodzony plik). Zrób zrzut ekranu i wyślij zrzut, albo wybierz inne zdjęcie.'));
     };
     reader.readAsDataURL(file);
   };
   inp.click();
 }
 
-function compressImg(dataUrl, maxKB, cb){
+function compressImg(dataUrl, maxKB, cb, onErr){
   const img=new Image();
+  img.onerror=()=>{ if(onErr)onErr(); };
   img.onload=()=>{
     let w=img.width, h=img.height;
+    if(!w||!h){ if(onErr)onErr(); return; }
     const maxPx=1200;
     if(w>maxPx||h>maxPx){ const r=Math.min(maxPx/w,maxPx/h); w=Math.round(w*r); h=Math.round(h*r); }
     const c=document.createElement('canvas'); c.width=w; c.height=h;
