@@ -181,7 +181,9 @@
   .msg{background:var(--card);color:var(--ink);border-radius:13px;padding:9px 12px;max-width:86%}
   .msg.me{align-self:flex-end;background:#FBF1D9}
   .msg .who{font-size:11px;font-weight:700;color:var(--gold-d);margin-bottom:2px}
-  .msg .tx{font-size:14px;line-height:1.35;word-wrap:break-word;overflow-wrap:anywhere}
+  .msg .tx{font-size:14px;line-height:1.35;word-wrap:break-word;overflow-wrap:anywhere;white-space:pre-line}
+  .msg.bot{background:#FBF6E6;border:1.5px solid var(--gold);max-width:92%}
+  .msg.bot .who{color:var(--gold-d);font-size:12px}
   /* ── NOWE v4 ── */
   /* Historia drużyny */
   .team-hist-flag{font-size:32px;display:block;text-align:center;margin-bottom:4px}
@@ -760,6 +762,35 @@ function groupTablesView(groupMs){
   return `<div class="sec-h">Tabele grup</div><div class="grp-grid">${cards}</div>
     <div class="grp-legend">🟢 miejsca 1–2 = awans bezpośredni · 🟡 3. miejsce walczy o awans wśród najlepszych z trzecich. Kolejność: punkty → różnica bramek → bramki strzelone.</div>`;
 }
+/* ---------- v3: mistrz rundy ---------- */
+function stageChampions(){
+  const byStage={};
+  sortedMatches().forEach(m=>{const k=m.stage||'Mecz';(byStage[k]=byStage[k]||[]).push(m);});
+  const out={};
+  Object.entries(byStage).forEach(([st,ms])=>{
+    if(!ms.length||!ms.every(m=>m.done))return;
+    const sc={};
+    ms.forEach(m=>Object.entries(PRED[m.id]||{}).forEach(([pid,pr])=>{
+      if(!PART[pid])return;
+      const ph=Number(pr.h),pa=Number(pr.a),hs=Number(m.hs),as=Number(m.as);
+      sc[pid]=sc[pid]||{pts:0,exact:0};
+      if(ph===hs&&pa===as){sc[pid].pts+=3;sc[pid].exact++;}
+      else if(Math.sign(ph-pa)===Math.sign(hs-as))sc[pid].pts+=1;
+    }));
+    const arr=Object.entries(sc).filter(([,v])=>v.pts>0);
+    if(!arr.length)return;
+    const max=Math.max.apply(null,arr.map(([,v])=>v.pts));
+    const cand=arr.filter(([,v])=>v.pts===max);
+    const maxEx=Math.max.apply(null,cand.map(([,v])=>v.exact));
+    out[st]={pids:cand.filter(([,v])=>v.exact===maxEx).map(([pid])=>pid),pts:max,exact:maxEx};
+  });
+  return out;
+}
+function roundWinsMap(){
+  const sc=stageChampions(); const m={};
+  Object.entries(sc).forEach(([st,v])=>v.pids.forEach(pid=>{(m[pid]=m[pid]||[]).push(st);}));
+  return m;
+}
 function bracketView(){
   const all=sortedMatches();
   const byStage={};
@@ -802,19 +833,20 @@ function viewTable(){
   const s=standings();
   if(!s.length)return `<div class="card center muted">Brak uczestników.</div>`;
   const prev=META.prevRanksClassic;
+  const rw=roundWinsMap();
   const rows=s.map((r,i)=>`
     <div class="lb-row ${i===0?'lead':''}">
       <div class="rank">${i+1}</div>
       ${avHtml(r.pid,36)}
-      <div class="lb-name clk" onclick="showProfile('${r.pid}')">${i===0?'<span class="crown">👑</span> ':''}<b>${esc(r.name)}</b>${movementHtml(r.pid,i+1,prev)}
+      <div class="lb-name clk" onclick="showProfile('${r.pid}')">${i===0?'<span class="crown">👑</span> ':''}<b>${esc(r.name)}</b>${rw[r.pid]?` <span title="Mistrz rundy">🎖️${rw[r.pid].length>1?'×'+rw[r.pid].length:''}</span>`:''}${movementHtml(r.pid,i+1,prev)}
         <div class="lb-sub">start ${r.start} · trafienia ${r.correct}${r.champPts?` · 🏆 mistrz +${r.champPts}`:''}</div></div>
       <div class="pts">${r.total}<small>PKT</small></div>
     </div>`).join('');
   const finalDone=Object.values(MATCH).some(m=>(m.stage||'')==='Finał'&&m.done);
   const podiumBtn=finalDone?`<button class="primary" style="margin-top:8px" onclick="showPodium()">🏆 Pokaż podium końcowe</button>`:'';
-  const histBtn=`<button class="icon-btn" style="width:100%;margin-top:8px" onclick="showHistory()">📜 Historia turniejów${Object.keys(ARCHIVE).length?' ('+Object.keys(ARCHIVE).length+')':''}</button>`;
+  const histBtn=`<button class="icon-btn" style="width:100%;margin-top:8px" onclick="showHistory()">🏛️ Hala sław${Object.keys(ARCHIVE).length?' ('+Object.keys(ARCHIVE).length+')':''}</button>`;
   return `<div class="sec-h">Klasyfikacja</div><div class="lb">${rows}</div>
-    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik + ${champPtsVal()} za trafionego mistrza turnieju. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}${histBtn}
+    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik + ${champPtsVal()} za trafionego mistrza turnieju. Strzałka = ruch od ostatniego wyniku. 🎖️ = mistrz rundy (najlepszy typer zakończonego etapu). Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}${histBtn}
     ${bracketView()}`;
 }
 function kicktippStandings(){
@@ -837,11 +869,12 @@ function viewKicktipp(){
   const s=kicktippStandings();
   if(!s.length)return `<div class="card center muted">Brak uczestników.</div>`;
   const prev=META.prevRanksKick;
+  const rw=roundWinsMap();
   const rows=s.map((r,i)=>`
     <div class="lb-row ${i===0?'lead':''}">
       <div class="rank">${i+1}</div>
       ${avHtml(r.pid,36)}
-      <div class="lb-name clk" onclick="showProfile('${r.pid}')">${i===0?'<span class="crown">👑</span> ':''}<b>${esc(r.name)}</b>${movementHtml(r.pid,i+1,prev)}
+      <div class="lb-name clk" onclick="showProfile('${r.pid}')">${i===0?'<span class="crown">👑</span> ':''}<b>${esc(r.name)}</b>${rw[r.pid]?` <span title="Mistrz rundy">🎖️${rw[r.pid].length>1?'×'+rw[r.pid].length:''}</span>`:''}${movementHtml(r.pid,i+1,prev)}
         <div class="lb-sub">start ${r.start} · dokładne ${r.exact}×3 · rezultat ${r.tend}×1${r.champPts?` · 🏆 mistrz +${r.champPts}`:''}</div></div>
       <div class="pts">${r.total}<small>PKT</small></div>
     </div>`).join('');
@@ -1033,7 +1066,7 @@ function saveResult(mid){
   db.ref('matches/'+mid).update({hs,as,done:true,rts:Date.now(),
     fhs:haveF?parseInt(fh,10):null, fas:haveF?parseInt(fa,10):null,
     ph:haveP?parseInt(ph,10):null, pa:haveP?parseInt(pa,10):null,
-    adv:(ko&&adv)?adv:null, pens:null, aet:null, pen:null}).then(()=>flash('Wynik zapisany'));
+    adv:(ko&&adv)?adv:null, pens:null, aet:null, pen:null}).then(()=>{flash('Wynik zapisany');maybeBotReport(mid,hs,as);});
 }
 function delMatch(mid){if(confirm('Usunąć mecz?')){db.ref('matches/'+mid).remove();db.ref('predictions/'+mid).remove();}}
 function addMatch(){
@@ -1253,6 +1286,55 @@ function sendMatchComment(mid){
     .then(()=>{MC_DRAFT[mid]='';const el=$('mc_'+mid);if(el)el.value='';}).catch(()=>{});
 }
 
+/* ---------- v3: Liga Bot — auto-raport po rundzie ---------- */
+function buildStageReport(st,MX){
+  const ms=Object.entries(MX).map(([id,m])=>({id,...m})).filter(m=>(m.stage||'Mecz')===st&&m.done);
+  if(!ms.length)return '';
+  const sc={};let exTotal=0;
+  ms.forEach(m=>Object.entries(PRED[m.id]||{}).forEach(([pid,pr])=>{
+    if(!PART[pid])return;
+    const ph=Number(pr.h),pa=Number(pr.a),hs=Number(m.hs),as=Number(m.as);
+    sc[pid]=sc[pid]||{pts:0,exact:0};
+    if(ph===hs&&pa===as){sc[pid].pts+=3;sc[pid].exact++;exTotal++;}
+    else if(Math.sign(ph-pa)===Math.sign(hs-as))sc[pid].pts+=1;
+  }));
+  const arr=Object.entries(sc).sort((a,b)=>b[1].pts-a[1].pts||b[1].exact-a[1].exact);
+  const pl_m=(n)=>n===1?'mecz':((n%10>=2&&n%10<=4&&(n%100<12||n%100>14))?'mecze':'meczów');
+  let out='📋 RAPORT · '+st.toUpperCase()+' · '+ms.length+' '+pl_m(ms.length)+' rozegrane';
+  if(arr.length&&arr[0][1].pts>0){
+    const best=arr[0][1];
+    const top=arr.filter(([,v])=>v.pts===best.pts&&v.exact===best.exact).map(([pid])=>PART[pid].name);
+    out+='\n🥇 MVP rundy: '+top.join(', ')+' — '+best.pts+' pkt Kicktipp ('+best.exact+' dokładn'+(best.exact===1?'e':'ych')+')';
+  } else out+='\n🙈 Nikt nie zapunktował w tej rundzie…';
+  out+='\n🎯 Dokładne trafienia w rundzie: '+exTotal;
+  // lider klasyfikacji klasycznej po tej rundzie
+  const totals=Object.entries(PART).map(([pid,p])=>{
+    let c=0;Object.entries(MX).forEach(([mid,m])=>{
+      if(!m.done)return;const pr=PRED[mid]&&PRED[mid][pid];
+      if(pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))c++;});
+    return {name:p.name,total:Number(p.start||0)+c};
+  }).sort((a,b)=>b.total-a.total);
+  if(totals.length){
+    const lead=totals.filter(t=>t.total===totals[0].total).map(t=>t.name);
+    out+='\n👑 Prowadzi: '+lead.join(', ')+' ('+totals[0].total+' pkt)';
+  }
+  return out;
+}
+function maybeBotReport(mid,hs,as){
+  const m=MATCH[mid]; if(!m)return;
+  const st=m.stage||'Mecz';
+  const stMs=Object.entries(MATCH).map(([id,x])=>({id,...x})).filter(x=>(x.stage||'Mecz')===st);
+  const allDone=stMs.every(x=>x.id===mid?true:!!x.done);
+  if(!allDone)return;
+  const key='r_'+st.replace(/[.#$/\[\]]/g,'_');
+  db.ref('meta/botSent/'+key).transaction(cur=>cur===true?undefined:true,(err,committed)=>{
+    if(err||!committed)return;
+    const MX={};Object.entries(MATCH).forEach(([id,x])=>{MX[id]=Object.assign({},x);});
+    MX[mid]=Object.assign({},MX[mid],{hs:Number(hs),as:Number(as),done:true});
+    const rep=buildStageReport(st,MX);
+    if(rep)db.ref('chat').push({pid:'__bot__',name:'⚽ Liga Bot',text:rep.slice(0,900),ts:Date.now()});
+  });
+}
 /* ---------- v2: chat ---------- */
 function viewChat(){
   const validImg=m=>m.img&&typeof m.img==='string'&&m.img.indexOf('data:image')===0&&m.img.length>200;
@@ -1261,9 +1343,10 @@ function viewChat(){
     .sort((a,b)=>a.ts-b.ts).slice(-150);
   const list=msgs.length? msgs.map(m=>{
     const mine=m.pid===ME;
+    const isBot=m.pid==='__bot__';
     const imgHtml=validImg(m)?`<img class="msg-img" src="${m.img}" onclick="viewImgFull(this.src)" loading="lazy">`:'' ;
     const txtHtml=m.text?`<div class="tx">${esc(m.text)}</div>`:'';
-    return `<div class="msg ${mine?'me':''}">${mine?'':`<div class="who" style="display:flex;align-items:center;gap:5px">${avHtml(m.pid,18)}${esc(m.name)}</div>`}${txtHtml}${imgHtml}<div class="tm">${fmtClock(m.ts)}</div>${chatReactHtml(m.id,m)}</div>`;
+    return `<div class="msg ${mine?'me':''}${isBot?' bot':''}">${mine?'':`<div class="who" style="display:flex;align-items:center;gap:5px">${isBot?'🤖':avHtml(m.pid,18)}${esc(m.name)}</div>`}${txtHtml}${imgHtml}<div class="tm">${fmtClock(m.ts)}</div>${chatReactHtml(m.id,m)}</div>`;
   }).join('') : `<div class="card center muted">Cisza w eterze — zacznij pierwszy. 🎙️</div>`;
   return `<div class="sec-h">Czat ligi</div>
     <div class="chat" id="chatlist" style="margin-bottom:60px">${list}</div>
@@ -1461,6 +1544,7 @@ function showProfile(pid){
     <div class="muted" style="font-size:13px">Dokładne: ${exact} · rezultat: ${tend} · pudła: ${miss} · obstawione: ${pred}</div>
     <div style="margin-top:14px"><b style="font-size:13px">Forma (ostatnie 5):</b><div class="forma">${forma}</div></div>
     <div style="margin-top:14px;font-size:14px">${upsetHtml}</div>
+    ${(function(){const w=roundWinsMap()[pid];return w?`<div style="margin-top:10px;font-size:14px">🎖️ <b>Mistrz rundy:</b> ${w.map(esc).join(', ')}</div>`:'';})()}
     <div style="margin-top:14px"><b style="font-size:13px">Odznaki:</b>${(function(){const bb=earnedBadges(pid);return bb.length?bb.map(x=>`<div class="prow"><span class="nm">${x.e} ${esc(x.n)}</span><span class="muted" style="font-size:12px">${esc(x.d)}</span></div>`).join(''):'<div class="muted" style="font-size:13px">Brak odznak — jeszcze przed Tobą!</div>';})()}</div>
     ${(function(){
       const earned=new Set(earnedBadges(pid).map(b=>b.n));
@@ -2127,12 +2211,39 @@ function showHistory(){
       <div style="display:none;margin-top:6px">${fullRows}</div>
     </div>`;
   }).join(''):`<div class="muted center" style="padding:14px 0">Jeszcze żaden turniej nie został zarchiwizowany.<br>Gdy admin zakończy sezon, pojawi się tu na stałe.</div>`;
+  // 🏛️ Rekordy wszech czasów
+  let recPts=null,recExact=null,recBadges=null;const champHits=[];
+  archives.forEach(arc=>{
+    (arc.standingsClassic||[]).forEach(r=>{
+      if(!recPts||r.total>recPts.v)recPts={v:r.total,name:r.name,t:arc.name};
+      const ex=Number(r.correct||0);
+      if(!recExact||ex>recExact.v)recExact={v:ex,name:r.name,t:arc.name};
+    });
+    Object.entries(arc.badges||{}).forEach(([pid,bb])=>{
+      const n=(bb||[]).length,nm=arc.participants&&arc.participants[pid]&&arc.participants[pid].name;
+      if(nm&&(!recBadges||n>recBadges.v))recBadges={v:n,name:nm,t:arc.name};
+    });
+    if(arc.champion&&arc.champPicks){
+      Object.entries(arc.champPicks).forEach(([pid,c])=>{
+        if(c===arc.champion){const nm=arc.participants&&arc.participants[pid]&&arc.participants[pid].name;
+          if(nm)champHits.push(nm+' ('+team(arc.champion).pl+', '+arc.name+')');}
+      });
+    }
+  });
+  const recRow=(e,t,r)=>r?`<div class="prow"><span class="nm">${e} ${t}</span><span class="muted" style="font-size:12px;text-align:right"><b>${esc(r.name)}</b> — ${r.v}<br>${esc(r.t)}</span></div>`:'';
+  const recordsHtml=(recPts||recExact||recBadges||champHits.length)?`<div class="card" style="padding:14px">
+    ${recRow('🏔️','Najwięcej pkt w edycji',recPts)}
+    ${recRow('🎯','Najwięcej dokładnych w edycji',recExact)}
+    ${recRow('🎖️','Najwięcej odznak w edycji',recBadges)}
+    ${champHits.length?`<div class="prow"><span class="nm">🏆 Trafiony mistrz turnieju</span><span class="muted" style="font-size:12px;text-align:right">${champHits.map(esc).join('<br>')}</span></div>`:''}
+  </div>`:'';
   const ov=document.createElement('div');
   ov.className='ovl'; ov.onclick=e=>{if(e.target===ov)ov.remove();};
   ov.innerHTML=`<div class="sheet">
     <button class="x" onclick="this.closest('.ovl').remove()">Zamknij</button>
     <div class="sec-h" style="margin-top:0">🏆 Ranking wszech czasów</div>
     ${allTimeHtml}
+    ${recordsHtml?`<div class="sec-h">🏛️ Rekordy wszech czasów</div>${recordsHtml}`:''}
     <div class="sec-h">Archiwum turniejów</div>
     ${archivesHtml}
   </div>`;
