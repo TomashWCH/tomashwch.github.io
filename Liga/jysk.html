@@ -1003,6 +1003,8 @@ function renderAdmin(){
         <textarea id="bulk" rows="5" placeholder="POR CRO 03.07 01:00 1/16 finału&#10;ESP AUT 02.07 21:00 1/16 finału&#10;ARG-CPV 04.07 00:00 1/16 finału"></textarea>
         <div class="hint">Jedna linia = jeden mecz: <b>KOD1 KOD2 DD.MM GG:MM Etap</b>. Kody jak w doborze drużyn powyżej (np. POR, CRO, ARG). Czas polski. Dla fazy grupowej możesz dopisać literę grupy na końcu, np. <b>POL ARG 12.06 21:00 Faza grupowa C</b>.</div>
         <button class="primary" onclick="addBulk()">Dodaj z listy</button>
+        <button class="icon-btn" style="width:100%;margin-top:8px" onclick="repairStages()">🔧 Napraw polskie znaki w etapach</button>
+        <div class="hint">Użyj, jeśli w apce widzisz zepsute nazwy typu „finaĹ‚u” — jednym kliknięciem ujednolici nazwy etapów we wszystkich meczach, bez utraty typów i wyników.</div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
         <label>Albo wklej wiele wyników naraz</label>
@@ -1934,6 +1936,37 @@ function viewStaty(){
 }
 
 /* ---------- v2: bulk add matches ---------- */
+/* ---------- Naprawa polskich znaków (mojibake) w etapach ---------- */
+function fixPolish(s){
+  return String(s||'')
+    .replace(/Ä…/g,'ą').replace(/Ä‡/g,'ć').replace(/Ä™/g,'ę').replace(/Ĺ‚/g,'ł').replace(/Ĺ„/g,'ń')
+    .replace(/Ăł/g,'ó').replace(/Ĺ›/g,'ś').replace(/Ĺş/g,'ź').replace(/ĹĽ/g,'ż')
+    .replace(/Ä„/g,'Ą').replace(/Ä†/g,'Ć').replace(/Ä˜/g,'Ę').replace(/Ĺƒ/g,'Ń')
+    .replace(/Ă“/g,'Ó').replace(/Ĺš/g,'Ś').replace(/Ĺą/g,'Ź').replace(/Ĺ»/g,'Ż')
+    .replace(/Ĺ/g,'Ł').replace(/\uFFFD/g,'');
+}
+function canonStage(s){
+  const t=fixPolish(s).toLowerCase().trim();
+  if(t.indexOf('faza grupowa')===0)return 'Faza grupowa';
+  if(t.indexOf('1/16')===0)return '1/16 finału';
+  if(t.indexOf('1/8')===0)return '1/8 finału';
+  if(t.indexOf('1/4')===0)return '1/4 finału';
+  if(t.indexOf('1/2')===0||t.indexOf('półfina')>=0)return '1/2 finału';
+  if(t.indexOf('3. miejsce')>=0||t.indexOf('3 miejsce')>=0)return 'Mecz o 3. miejsce';
+  if(t.indexOf('fina')===0)return 'Finał';
+  return null;
+}
+function repairStages(){
+  const up={};let n=0;const zmiany={};
+  Object.entries(MATCH).forEach(([id,m])=>{
+    const c=canonStage(m.stage);
+    if(c&&c!==m.stage){up['matches/'+id+'/stage']=c;n++;zmiany[m.stage]=c;}
+  });
+  if(!n){alert('Wszystkie etapy wyglądają dobrze — nie ma czego naprawiać. 👍');return;}
+  const lista=Object.entries(zmiany).map(([od,na])=>'„'+od+'” → „'+na+'”').join('\n');
+  if(!confirm('Naprawić nazwy etapów w '+n+' meczach?\n\n'+lista+'\n\nTypy i wyniki zostają bez zmian.'))return;
+  db.ref().update(up).then(()=>flash('Naprawiono etapy w '+n+' meczach ✅')).catch(()=>alert('Błąd zapisu — sprawdź internet.'));
+}
 function addBulk(){
   const raw=($('bulk').value||'').trim(); if(!raw){alert('Wklej listę meczów.');return;}
   const lines=raw.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -1947,6 +1980,7 @@ function addBulk(){
     let stage=rest.slice(2).join(' ')||'Mecz', grp=null;
     const gm=stage.match(/^(Faza grupowa)\s+([A-La-l])$/);
     if(gm){stage=gm[1];grp=gm[2].toUpperCase();}
+    stage=canonStage(stage)||stage;
     if(!TEAMS[h]||!TEAMS[a]||h===a||!date||!time||!/^\d{1,2}\.\d{1,2}$/.test(date)||!/^\d{1,2}:\d{2}$/.test(time)){errs.push(line);return;}
     const exists=Object.values(MATCH).some(mm=>mm.stage===stage&&((mm.home===h&&mm.away===a)||(mm.home===a&&mm.away===h)));
     if(exists){dupes.push(line);return;}
