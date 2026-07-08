@@ -598,9 +598,9 @@ function matchCard(m){
   return `<div class="match${isFinal?' final-match':''}">
     <div class="m-top"><span class="stage">${esc(m.stage||'')}</span><span>${fmt(m.kickoff)} ${pill}</span></div>
     <div class="teams">
-      <div class="team"><span class="flag">${H.f}</span><span class="tname">${esc(H.pl)}</span></div>
+      <div class="team"><span class="flag" onclick="showTeamHistory('${m.home}')" style="cursor:pointer">${H.f}</span><span class="tname team-name-clk" onclick="showTeamHistory('${m.home}')">${esc(H.pl)}</span></div>
       ${sc}
-      <div class="team away"><span class="tname">${esc(A.pl)}</span><span class="flag">${A.f}</span></div>
+      <div class="team away"><span class="tname team-name-clk" onclick="showTeamHistory('${m.away}')">${esc(A.pl)}</span><span class="flag" onclick="showTeamHistory('${m.away}')" style="cursor:pointer">${A.f}</span></div>
     </div>
     ${resultNote(m)}${oddsHtml}${pickArea}${picksHtml}</div>`;
 }
