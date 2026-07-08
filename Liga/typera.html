@@ -65,6 +65,10 @@
   @keyframes finalShine{0%{background-position:0% 0}100%{background-position:200% 0}}
   .toggle-h{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
   .toggle-h .chev{color:var(--gold);font-size:13px;font-weight:600}
+  .stage-hdr{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;
+    padding:10px 2px;border-top:1px solid var(--line);margin-top:6px;color:var(--ink)}
+  .stage-hdr b{font-family:Oswald;font-size:12.5px;letter-spacing:.3px}
+  .chev-mini{color:var(--gold-d);font-size:11.5px;font-weight:600;white-space:nowrap}
   .admin-mrow-collapsed{cursor:pointer}
   .admin-mrow-collapsed:active{opacity:.7}
   .m-top{display:flex;justify-content:space-between;align-items:center;
@@ -345,7 +349,7 @@ const KNOCK=[
 ];
 
 /* ---------- State ---------- */
-let CFG={}, PART={}, MATCH={}, PRED={}, CHAT={}, META={};
+let CFG={}, PART={}, MATCH={}, PRED={}, CHAT={}, META={}, ARCHIVE={};
 let CHAT_DRAFT='';
 let MC_DRAFT={};
 const REMO=['👍','🔥','😂','😮','👏'];
@@ -354,8 +358,10 @@ const EXP=new Set();
 const PHASE_EXP=new Set();
 let adminPartOpen=false;
 const adminExpMatches=new Set();
+const adminPhaseExp=new Set();
 function toggleAdminPart(){adminPartOpen=!adminPartOpen;render();}
 function toggleAdminMatch(mid){if(adminExpMatches.has(mid))adminExpMatches.delete(mid);else adminExpMatches.add(mid);render();}
+function toggleAdminPhase(st){if(adminPhaseExp.has(st))adminPhaseExp.delete(st);else adminPhaseExp.add(st);render();}
 let FEED_OPEN=false;
 let TAB='mecze';
 let ME=localStorage.getItem('typer_pid')||null;
@@ -399,6 +405,7 @@ function attach(){
   db.ref('predictions').on('value',s=>{PRED=s.val()||{};render();});
   db.ref('chat').on('value',s=>{CHAT=s.val()||{};render();});
   db.ref('meta').on('value',s=>{META=s.val()||{};render();});
+  db.ref('archive').on('value',s=>{ARCHIVE=s.val()||{};render();});
 }
 function maybeSeed(){
   db.ref('config/seeded').transaction(cur=>cur===true?undefined:true,(err,committed)=>{
@@ -698,8 +705,9 @@ function viewTable(){
     </div>`).join('');
   const finalDone=Object.values(MATCH).some(m=>(m.stage||'')==='Finał'&&m.done);
   const podiumBtn=finalDone?`<button class="primary" style="margin-top:8px" onclick="showPodium()">🏆 Pokaż podium końcowe</button>`:'';
+  const histBtn=`<button class="icon-btn" style="width:100%;margin-top:8px" onclick="showHistory()">📜 Historia turniejów${Object.keys(ARCHIVE).length?' ('+Object.keys(ARCHIVE).length+')':''}</button>`;
   return `<div class="sec-h">Klasyfikacja</div><div class="lb">${rows}</div>
-    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}
+    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}${histBtn}
     ${bracketView()}`;
 }
 function kicktippStandings(){
@@ -745,7 +753,7 @@ function renderAdmin(){
   const teamOpts=Object.keys(TEAMS).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl'))
     .map(c=>`<option value="${c}">${team(c).pl}</option>`).join('');
 
-  const mlist=sortedMatches().map(m=>{
+  const matchRow=(m)=>{
     const H=team(m.home).pl,A=team(m.away).pl,st=statusOf(m),ko=(m.stage||'')!=='Faza grupowa';
     const hasExt=(m.fhs!=null||m.ph!=null||m.adv);
     const isFinal=(m.stage||'')==='Finał';
@@ -786,7 +794,25 @@ function renderAdmin(){
         </div>`:''}
         ${m.done?`<button class="icon-btn mini" style="margin-top:6px" onclick="toggleAdminMatch('${m.id}')">Zwiń ⌃</button>`:''}</div>
       <button class="danger" onclick="delMatch('${m.id}')">Usuń</button>
-    </div>`;}).join('');
+    </div>`;
+  };
+  const stageGroups={};
+  sortedMatches().forEach(m=>{const k=m.stage||'—';(stageGroups[k]=stageGroups[k]||[]).push(m);});
+  const mlist=Object.keys(stageGroups).map(st=>{
+    const ms=stageGroups[st];
+    const allDone=ms.every(m=>m.done);
+    const doneCount=ms.filter(m=>m.done).length;
+    if(allDone){
+      const open=adminPhaseExp.has(st);
+      const key=st.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<div class="stage-hdr" onclick="toggleAdminPhase('${key}')">
+        <b>${esc(st)} · ${ms.length} mecz${ms.length===1?'':'ów'} ✅</b>
+        <span class="chev-mini">${open?'zwiń ⌃':'rozwiń ⌄'}</span>
+      </div>${open?ms.map(matchRow).join(''):''}`;
+    }
+    return `<div class="stage-hdr" style="cursor:default"><b>${esc(st)} · ${doneCount}/${ms.length} rozegranych</b></div>${ms.map(matchRow).join('')}`;
+  }).join('');
+
 
   $('app').innerHTML=header(ex)+`<div class="wrap">
     <div class="sec-h toggle-h" onclick="toggleAdminPart()"><span>Uczestnicy (${Object.keys(PART).length})</span><span class="chev">${adminPartOpen?'zwiń ⌃':'rozwiń ⌄'}</span></div>
@@ -844,6 +870,15 @@ function renderAdmin(){
       <label style="margin-top:14px">Czat</label>
       <button class="icon-btn" onclick="clearChat()">Wyczyść czat</button>
     </div>
+
+    <div class="sec-h">Nowy turniej</div>
+    <div class="card">
+      <div class="hint" style="margin-bottom:10px">Turniej się skończył? Zarchiwizuj go, żeby zapisać wyniki w historii, i zacznij kolejny na czystej planszy — bez zakładania nowej apki i bez utraty listy graczy.</div>
+      <label>Nazwa archiwizowanego turnieju</label>
+      <input id="arc_name" value="${esc(CFG.leagueName||'')}">
+      <button class="danger" style="width:100%;margin-top:10px" onclick="archiveTournament()">🏁 Zakończ i zarchiwizuj turniej</button>
+      ${Object.keys(ARCHIVE).length?`<div class="hint" style="margin-top:8px">Zarchiwizowanych turniejów: ${Object.keys(ARCHIVE).length}. Zobacz je w zakładce Tabela → Historia turniejów.</div>`:''}
+    </div>
     <div class="foot">Panel widoczny tylko dla Ciebie. Uczestnicy logują się swoim hasłem.</div>
   </div>`;
 }
@@ -890,6 +925,29 @@ function toggleShow(){db.ref('config/showBeforeKickoff').set(!CFG.showBeforeKick
 function saveName(){db.ref('config/leagueName').set($('lname').value.trim()||'LIGA TYPERA P258').then(()=>flash('Zapisano'));}
 function changeAdm(){const v=$('newadm').value.trim();if(v.length<4){alert('Min. 4 znaki.');return;}db.ref('config/adminPassword').set(v).then(()=>flash('Hasło zmienione'));}
 function flash(t){const d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2E9E5B;color:#fff;padding:10px 18px;border-radius:20px;font-weight:600;z-index:99;font-size:14px';document.body.appendChild(d);setTimeout(()=>d.remove(),1500);}
+function archiveTournament(){
+  const name=($('arc_name').value||'').trim()||CFG.leagueName||'Turniej';
+  if(!Object.keys(PART).length){alert('Brak uczestników do zarchiwizowania.');return;}
+  if(!confirm(`Zarchiwizować „${name}" i wyczyścić planszę pod nowy turniej?\n\nCo się stanie:\n• Wyniki, mecze, typy i czat zostaną zapisane w historii (zakładka Tabela → Historia turniejów)\n• Bieżące mecze, typy i czat zostaną wyczyszczone\n• Lista graczy i hasła zostaną — punkty startowe wyzerują się na nowy start\n\nTej operacji nie da się cofnąć.`))return;
+  const snapshot={
+    name, archivedAt:Date.now(),
+    participants:PART,
+    standingsClassic:standings(),
+    standingsKicktipp:kicktippStandings(),
+    matches:MATCH,
+    predictions:PRED,
+    badges:Object.fromEntries(Object.keys(PART).map(pid=>[pid,earnedBadges(pid)]))
+  };
+  db.ref('archive').push(snapshot).then(()=>{
+    const up={}; Object.keys(PART).forEach(pid=>{up['participants/'+pid+'/start']=0;});
+    return db.ref().update(up);
+  }).then(()=>db.ref('matches').remove())
+    .then(()=>db.ref('predictions').remove())
+    .then(()=>db.ref('chat').remove())
+    .then(()=>db.ref('meta').remove())
+    .then(()=>{flash('Turniej zarchiwizowany 🏁');$('arc_name').value='';})
+    .catch(()=>alert('Coś poszło nie tak — sprawdź internet i spróbuj ponownie.'));
+}
 
 /* ---------- v2: helpers ---------- */
 function fmtCountdown(ms){
@@ -1644,6 +1702,53 @@ function checkAndShowPodium(){
   setTimeout(showPodium,800);
 }
 
+function showHistory(){
+  const archives=Object.entries(ARCHIVE).map(([id,a])=>({id,...a})).sort((a,b)=>b.archivedAt-a.archivedAt);
+  const allTime={};
+  archives.forEach(arc=>{
+    const sc=(arc.standingsClassic||[]).slice().sort((a,b)=>b.total-a.total);
+    sc.forEach((r,i)=>{
+      const key=r.name;
+      allTime[key]=allTime[key]||{name:r.name,total:0,tournaments:0,wins:0};
+      allTime[key].total+=r.total; allTime[key].tournaments+=1;
+      if(i===0)allTime[key].wins+=1;
+    });
+  });
+  const allTimeRows=Object.values(allTime).sort((a,b)=>b.total-a.total||b.wins-a.wins||a.name.localeCompare(b.name,'pl'));
+  const allTimeHtml=allTimeRows.length?`<div class="lb">${allTimeRows.map((r,i)=>`
+    <div class="lb-row ${i===0?'lead':''}">
+      <div class="rank">${i+1}</div>
+      <div class="lb-name">${i===0?'<span class="crown">👑</span> ':''}<b>${esc(r.name)}</b>${r.wins?` <span style="font-size:13px">${'🏆'.repeat(Math.min(r.wins,3))}</span>`:''}
+        <div class="lb-sub">${r.tournaments} ${r.tournaments===1?'turniej':'turnieje(ów)'} rozegrane</div></div>
+      <div class="pts">${r.total}<small>PKT</small></div>
+    </div>`).join('')}</div>`:`<div class="muted center" style="padding:14px 0">Ranking wszech czasów pojawi się po zarchiwizowaniu pierwszego turnieju.</div>`;
+  const archivesHtml=archives.length?archives.map(arc=>{
+    const sc=(arc.standingsClassic||[]).slice().sort((a,b)=>b.total-a.total);
+    const medals=['🥇','🥈','🥉'];
+    const podium=sc.slice(0,3).map((r,i)=>`<div class="prow"><span class="nm">${medals[i]} ${esc(r.name)}</span><span class="muted">${r.total} pkt</span></div>`).join('');
+    const fullRows=sc.map((r,i)=>`<div class="prow"><span class="nm">${i+1}. ${esc(r.name)}</span><span class="muted">${r.total} pkt</span></div>`).join('');
+    const date=new Date(arc.archivedAt).toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit',year:'numeric'});
+    return `<div class="card" style="margin:10px 0;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="font-family:Oswald">${esc(arc.name)}</b><span class="muted" style="font-size:11px">${date}</span>
+      </div>
+      ${podium}
+      <button class="icon-btn" style="width:100%;margin-top:8px" onclick="const e=this.nextElementSibling;const open=e.style.display==='block';e.style.display=open?'none':'block';this.textContent=open?'Pokaż pełną klasyfikację ⌄':'Ukryj ⌃';">Pokaż pełną klasyfikację ⌄</button>
+      <div style="display:none;margin-top:6px">${fullRows}</div>
+    </div>`;
+  }).join(''):`<div class="muted center" style="padding:14px 0">Jeszcze żaden turniej nie został zarchiwizowany.<br>Gdy admin zakończy sezon, pojawi się tu na stałe.</div>`;
+  const ov=document.createElement('div');
+  ov.className='ovl'; ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="sheet">
+    <button class="x" onclick="this.closest('.ovl').remove()">Zamknij</button>
+    <div class="sec-h" style="margin-top:0">🏆 Ranking wszech czasów</div>
+    ${allTimeHtml}
+    <div class="sec-h">Archiwum turniejów</div>
+    ${archivesHtml}
+  </div>`;
+  document.body.appendChild(ov);
+}
+window.showHistory=showHistory;
 function showPodium(){
   const s=standings();
   if(!s.length)return;
