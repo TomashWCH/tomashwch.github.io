@@ -79,6 +79,21 @@
   .team{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
   .team.away{justify-content:flex-end;text-align:right}
   .flag{font-size:24px;line-height:1}
+
+  /* bracket */
+  .brk-scroll{overflow-x:auto;margin:0 -14px;padding:2px 14px 8px;-webkit-overflow-scrolling:touch}
+  .brk-wrap{display:flex;gap:10px;width:max-content}
+  .brk-col{width:132px;flex:0 0 auto;display:flex;flex-direction:column;gap:8px}
+  .brk-col-h{font-family:Oswald;font-weight:600;font-size:10.5px;letter-spacing:.8px;
+    color:#9AA199;text-transform:uppercase;text-align:center;padding-bottom:2px}
+  .brk-match{background:var(--card);border-radius:10px;padding:7px 8px;cursor:pointer}
+  .brk-match.brk-final{background:var(--gold);box-shadow:0 0 0 2px var(--gold-d) inset}
+  .brk-team{display:flex;align-items:center;gap:5px;padding:3px 0;color:var(--ink);opacity:.62}
+  .brk-team.brk-win{opacity:1;font-weight:700}
+  .brk-team .flag{font-size:15px}
+  .brk-name{flex:1;font-size:11px;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brk-sc{font-family:Oswald;font-weight:700;font-size:12px;min-width:14px;text-align:right}
+  .brk-summary{padding:0}
   .tname{font-family:Oswald;font-weight:600;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .score{font-family:Oswald;font-weight:700;font-size:30px;min-width:34px;text-align:center;color:#11150F}
   .vs{font-size:12px;color:var(--muted);font-weight:700;padding:0 2px}
@@ -634,6 +649,42 @@ function savePick(mid){
     .catch(e=>{ alert('Nie zapisano. Mecz mógł się już rozpocząć.'); });
 }
 
+function bracketView(){
+  const all=sortedMatches();
+  const byStage={};
+  all.forEach(m=>{const k=m.stage||'Mecz';(byStage[k]=byStage[k]||[]).push(m);});
+  const koOrder=['1/16 finału','1/8 finału','1/4 finału','1/2 finału','Mecz o 3. miejsce','Finał'];
+  const koStages=koOrder.filter(s=>byStage[s]&&byStage[s].length);
+  const groupMs=byStage['Faza grupowa']||[];
+  if(!groupMs.length&&!koStages.length)return '';
+  let cols='';
+  if(groupMs.length){
+    const gDone=groupMs.filter(m=>m.done).length;
+    cols+=`<div class="brk-col"><div class="brk-col-h">Faza grupowa</div>
+      <div class="brk-match brk-summary" onclick="go('rozegrane')">
+        <div style="text-align:center;padding:16px 6px">
+          <div style="font-size:22px">⚽</div>
+          <div style="font-family:Oswald;font-weight:700;font-size:15px;margin-top:4px">${gDone}/${groupMs.length}</div>
+          <div class="muted" style="font-size:10px">rozegranych</div>
+        </div>
+      </div></div>`;
+  }
+  koStages.forEach(st=>{
+    const ms=byStage[st].slice().sort((a,b)=>a.kickoff-b.kickoff);
+    const isFinal=st==='Finał';
+    const mh=ms.map(m=>{
+      const H=team(m.home),A=team(m.away),at=advTeam(m);
+      const hs=m.done?m.hs:'–',as=m.done?m.as:'–';
+      return `<div class="brk-match${isFinal?' brk-final':''}" onclick="go('rozegrane')">
+        <div class="brk-team${at==='home'?' brk-win':''}"><span class="flag">${H.f}</span><span class="brk-name">${esc(H.pl)}</span><span class="brk-sc">${hs}</span></div>
+        <div class="brk-team${at==='away'?' brk-win':''}"><span class="flag">${A.f}</span><span class="brk-name">${esc(A.pl)}</span><span class="brk-sc">${as}</span></div>
+      </div>`;
+    }).join('');
+    cols+=`<div class="brk-col"><div class="brk-col-h">${st==='Mecz o 3. miejsce'?'O 3. miejsce':esc(st)}</div>${mh}</div>`;
+  });
+  return `<div class="sec-h">Drabinka turniejowa</div><div class="brk-scroll"><div class="brk-wrap">${cols}</div></div>
+    <div class="hint center">Przesuń poziomo, by zobaczyć kolejne etapy · pogrubiona drużyna = awans.</div>`;
+}
 function viewTable(){
   const s=standings();
   if(!s.length)return `<div class="card center muted">Brak uczestników.</div>`;
@@ -648,7 +699,8 @@ function viewTable(){
   const finalDone=Object.values(MATCH).some(m=>(m.stage||'')==='Finał'&&m.done);
   const podiumBtn=finalDone?`<button class="primary" style="margin-top:8px" onclick="showPodium()">🏆 Pokaż podium końcowe</button>`:'';
   return `<div class="sec-h">Klasyfikacja</div><div class="lb">${rows}</div>
-    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}`;
+    <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik. Strzałka = ruch od ostatniego wyniku. Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}
+    ${bracketView()}`;
 }
 function kicktippStandings(){
   return Object.entries(PART).map(([pid,p])=>{
@@ -1197,6 +1249,72 @@ function earnedBadges(pid){
   if(komplet)b.push({e:'💯',n:'Komplet rundy',d:'cały etap dokładnie'});
   if(cur>=2)b.push({e:'🔥',n:'Gorąca ręka',d:'aktualna seria 2+'});
   if(dm.length>=5&&predTotal===dm.length&&!missedAny)b.push({e:'🗳️',n:'Sumienny',d:'obstawił każdy mecz'});
+
+  // Finalista: obstawił mecz finałowy
+  const finalEntry=Object.entries(MATCH).find(([id,m])=>(m.stage||'')==='Finał');
+  if(finalEntry&&PRED[finalEntry[0]]&&PRED[finalEntry[0]][pid])b.push({e:'🏅',n:'Finalista',d:'obstawił mecz finałowy'});
+
+  // Pierwszy strzał: pierwsze dokładne trafienie w całym turnieju
+  let firstHitMatch=null;
+  for(const m of dm){
+    const hitHere=Object.keys(PART).some(p2=>{const pr2=PRED[m.id]&&PRED[m.id][p2];return pr2&&Number(pr2.h)===Number(m.hs)&&Number(pr2.a)===Number(m.as);});
+    if(hitHere){firstHitMatch=m;break;}
+  }
+  if(firstHitMatch){
+    const prMe=PRED[firstHitMatch.id]&&PRED[firstHitMatch.id][pid];
+    if(prMe&&Number(prMe.h)===Number(firstHitMatch.hs)&&Number(prMe.a)===Number(firstHitMatch.as))
+      b.push({e:'🥇',n:'Pierwszy strzał',d:'pierwsze dokładne trafienie turnieju'});
+  }
+
+  // Styl typowania: nocna zmiana / błyskawica / ostatnia chwila (na bazie znacznika czasu zapisu typu)
+  let nightOwl=false, earlyBird=false, lastMinute=false;
+  Object.entries(MATCH).forEach(([mid,m])=>{
+    const pr=PRED[mid]&&PRED[mid][pid];
+    if(!pr||!pr.ts)return;
+    const hr=new Date(pr.ts).getHours();
+    if(hr>=0&&hr<5)nightOwl=true;
+    const diff=m.kickoff-pr.ts;
+    if(diff>=48*3600*1000)earlyBird=true;
+    if(diff>=0&&diff<=15*60*1000)lastMinute=true;
+  });
+  if(nightOwl)b.push({e:'🌙',n:'Nocna zmiana',d:'typ wysłany między północą a 5 rano'});
+  if(earlyBird)b.push({e:'⚡',n:'Błyskawica',d:'typ zapisany 48h+ przed pierwszym gwizdkiem'});
+  if(lastMinute)b.push({e:'🐢',n:'Ostatnia chwila',d:'typ zapisany w ostatnich 15 minutach przed zamknięciem'});
+
+  // Zgodny z tłumem / Inaczej niż wszyscy: porównanie typu z resztą grupy
+  let zgodnyCount=0, uniqueHit=false;
+  dm.forEach(m=>{
+    const preds=Object.entries(PRED[m.id]||{}).filter(([p2])=>PART[p2]);
+    if(preds.length<2)return;
+    const counts={};
+    preds.forEach(([p2,pr2])=>{const k=pr2.h+':'+pr2.a;counts[k]=(counts[k]||0)+1;});
+    const prMe=PRED[m.id]&&PRED[m.id][pid];
+    if(!prMe)return;
+    const kMe=prMe.h+':'+prMe.a;
+    const maxCount=Math.max.apply(null,Object.values(counts));
+    if(counts[kMe]===maxCount&&maxCount>1)zgodnyCount++;
+    const exact=Number(prMe.h)===Number(m.hs)&&Number(prMe.a)===Number(m.as);
+    if(exact&&counts[kMe]===1)uniqueHit=true;
+  });
+  if(zgodnyCount>=5)b.push({e:'🤝',n:'Zgodny z tłumem',d:'5+ razy typ zgodny z większością grupy'});
+  if(uniqueHit)b.push({e:'🦄',n:'Inaczej niż wszyscy',d:'trafiony wynik, który typował tylko on'});
+
+  // Underdog wierny / Showman: odważne typy na bazie kursów
+  let underdogCount=0, showman=false;
+  dm.forEach(m=>{
+    const pr=PRED[m.id]&&PRED[m.id][pid]; if(!pr)return;
+    const ph=Number(pr.h),pa=Number(pr.a);
+    const od=matchOdds(m);
+    let winProbPct;
+    if(ph>pa)winProbPct=od.h;
+    else if(ph<pa)winProbPct=od.a;
+    else winProbPct=od.three?od.d:50;
+    if(winProbPct<35)underdogCount++;
+    if(Math.abs(ph-pa)>=4&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))showman=true;
+  });
+  if(underdogCount>=3)b.push({e:'📉',n:'Underdog wierny',d:'3+ razy postawił na zespół z szansą <35%'});
+  if(showman)b.push({e:'🎪',n:'Showman',d:'trafiony wynik z różnicą 4+ goli'});
+
   return b;
 }
 function badgesRoster(){
