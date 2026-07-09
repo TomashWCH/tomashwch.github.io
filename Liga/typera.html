@@ -350,7 +350,7 @@ firebase.initializeApp(firebaseConfig);
    Dopóki jest tam placeholder, App Check jest wyłączony i apka działa po staremu.
    Po wklejeniu klucza i wgraniu pliku: sprawdź w konsoli Firebase -> App Check,
    że zapytania są weryfikowane, i DOPIERO WTEDY włącz Enforce dla Realtime Database. */
-const APP_CHECK_SITE_KEY='6LfHUEstAAAAAGC6Sl0TQ3en5GlhWGcr9yYv80rq';
+const APP_CHECK_SITE_KEY='6LerW0stAAAAALChTaTiw262PoyI3aMhQCjNbYvz';
 if(APP_CHECK_SITE_KEY && APP_CHECK_SITE_KEY.indexOf('TU_WKLEJ')!==0 && firebase.appCheck){
   try{ firebase.appCheck().activate(APP_CHECK_SITE_KEY, true); }
   catch(e){ console.warn('App Check nie wystartował:', e); }
