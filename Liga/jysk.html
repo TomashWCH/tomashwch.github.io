@@ -708,8 +708,10 @@ function matchCard(m){
       <div style="text-align:center;padding:0 14px 12px"><button class="icon-btn" style="width:100%" onclick="toggleExp('${m.id}')">${open?'Ukryj typy ⌃':'Pokaż typy ('+nPicks+') ⌄'}</button></div>
       ${open?`${oddsHtml}${picksHtml}`:''}</div>`;
   }
+  const pcount=st==='open'?Object.keys(PRED[m.id]||{}).filter(p2=>PART[p2]).length:0;
+  const ptotal=Object.keys(PART).length;
   return `<div class="match${isFinal?' final-match':''}" id="mrow_${m.id}">
-    <div class="m-top"><span class="stage">${esc(m.stage||'')}</span><span>${fmt(m.kickoff)} ${pill}</span></div>
+    <div class="m-top"><span class="stage">${esc(m.stage||'')}</span><span>${st==='open'?`<span class="muted" style="font-size:11px;margin-right:8px">🗳️ ${pcount}/${ptotal}</span>`:''}${fmt(m.kickoff)} ${pill}</span></div>
     <div class="teams">
       <div class="team"><span class="flag" onclick="showTeamHistory('${m.home}')" style="cursor:pointer">${H.f}</span><span class="tname team-name-clk" onclick="showTeamHistory('${m.home}')">${esc(H.pl)}</span></div>
       ${sc}
@@ -1012,6 +1014,16 @@ function renderAdmin(){
         <span style="font-size:20px">💾</span>
         <div style="flex:1;font-size:13px">${age===null?'<b>Brak kopii zapasowej z tego urządzenia.</b> Po ostatnich przygodach — warto.':(warn?`Ostatnia kopia: <b>${age} dni temu</b> — pora na świeżą.`:`Ostatnia kopia: ${age===0?'dzisiaj':age+' dni temu'} ✓`)}</div>
         <button class="icon-btn" onclick="downloadBackup()">Pobierz kopię bazy</button>
+      </div>`;})()}
+    ${(function(){
+      const done=new Set(sortedMatches().filter(m=>m.done).map(m=>m.stage||'Mecz'));
+      const opts=[...done].map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+      return `<div class="card" style="padding:12px 14px">
+        <div style="font-family:Oswald;font-weight:700;font-size:14px;margin-bottom:8px">📣 Rytuał ligi</div>
+        ${done.size?`<div class="row2"><select id="rimg_stage">${opts}</select><button class="icon-btn" onclick="roundImage()">🖼️ Grafika rundy</button></div>
+        <div class="hint">Obrazek z wynikami etapu, trafieniami graczy i TOP 5 tabeli — gotowy na Messengera.</div>`:''}
+        <button class="icon-btn" style="width:100%;margin-top:8px" onclick="remindOnChat()">🔔 Przypomnij o typowaniu (bot na czacie)</button>
+        <div class="hint">Bot wypisze mecze z najbliższych 36 godzin i kto jeszcze nie zapisał typu. Zobaczysz treść przed wysłaniem.</div>
       </div>`;})()}
     <div class="sec-h">Mecze i wyniki</div>
     ${(function(){
@@ -1478,6 +1490,94 @@ function addBulkResults(){
     if(errs.length)alert('Nierozpoznane linie:\n'+errs.join('\n'));
     Object.keys(touched).forEach(st=>botReportIfComplete(st,MX));
   }).catch(e=>alert(dbErrMsg(e)));
+}
+/* ---------- v6: przypomnienie o typowaniu ---------- */
+function remindOnChat(){
+  const now=Date.now();
+  const soon=sortedMatches().filter(m=>m.kickoff>now&&m.kickoff<now+36*3600000);
+  if(!soon.length){alert('W najbliższych 36 godzinach nie ma żadnych meczów.');return;}
+  const lines=[];
+  soon.forEach(m=>{
+    const missing=Object.entries(PART).filter(([pid])=>!(PRED[m.id]&&PRED[m.id][pid])).map(([,p])=>p.name);
+    if(missing.length)lines.push(team(m.home).f+' '+team(m.home).pl+' – '+team(m.away).pl+' '+team(m.away).f+' ('+fmt(m.kickoff)+')\n   ⏳ brakuje: '+missing.join(', '));
+  });
+  if(!lines.length){flash('Wszyscy mają komplet typów 👍');return;}
+  const txt='⏰ PRZYPOMNIENIE O TYPOWANIU\n\n'+lines.join('\n')+'\n\nTyp zapisany = spokojny sen 😴';
+  if(!confirm('Bot wyśle na czat:\n\n'+txt))return;
+  db.ref('chat').push({pid:'__bot__',name:'⚽ Liga Bot',text:txt.slice(0,900),ts:Date.now()})
+    .then(()=>flash('Przypomnienie wysłane 🔔')).catch(e=>alert(dbErrMsg(e)));
+}
+/* ---------- v6: grafika rundy do Messengera ---------- */
+function roundImage(){
+  const st=($('rimg_stage')&&$('rimg_stage').value)||'';
+  if(!st){alert('Wybierz etap.');return;}
+  let ms=sortedMatches().filter(m=>(m.stage||'Mecz')===st&&m.done);
+  if(!ms.length){alert('Ten etap nie ma jeszcze wpisanych wyników.');return;}
+  let trimmed=0;
+  if(ms.length>16){trimmed=ms.length-16;ms=ms.slice(-16);}
+  const rows=ms.map(m=>{
+    const hits=Object.entries(PRED[m.id]||{})
+      .filter(([pid,pr])=>PART[pid]&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))
+      .map(([pid,pr])=>PART[pid].name+(pr.j?' ⭐':''));
+    return {m,hits};
+  });
+  const table=kicktippStandings().slice(0,5);
+  const W=1080,headH=210,rowH=88,gap=36,tabHead=76,tabRow=54,footH=100;
+  const H=headH+rows.length*rowH+gap+tabHead+table.length*tabRow+footH;
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,SHARE_BG1);g.addColorStop(1,SHARE_BG2);
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  x.textAlign='center';
+  x.fillStyle='rgba(255,255,255,.85)';x.font='700 34px Oswald, Arial';
+  x.fillText((CFG.leagueName||'LIGA TYPERA').toUpperCase(),W/2,64);
+  x.fillStyle=SHARE_AC;x.font='700 52px Oswald, Arial';
+  x.fillText('RAPORT · '+st.toUpperCase(),W/2,126);
+  x.fillStyle='rgba(255,255,255,.5)';x.font='500 24px Inter, Arial';
+  x.fillText(trimmed?('ostatnie '+ms.length+' meczów (+'+trimmed+' wcześniejszych)'):(ms.length+' '+(ms.length===1?'mecz':(ms.length<5?'mecze':'meczów'))),W/2,164);
+  x.strokeStyle=SHARE_AC;x.lineWidth=3;x.beginPath();x.moveTo(W/2-140,182);x.lineTo(W/2+140,182);x.stroke();
+  let y=headH+14;
+  rows.forEach(r=>{
+    const m=r.m;
+    x.textAlign='center';
+    x.fillStyle='#FFFFFF';x.font='700 33px Inter, Arial';
+    x.fillText(team(m.home).f+' '+team(m.home).pl+'  '+m.hs+':'+m.as+'  '+team(m.away).pl+' '+team(m.away).f,W/2,y);
+    if(r.hits.length){
+      let txt='🎯 '+r.hits.join(', ');
+      let fs=25;x.font='600 '+fs+'px Inter, Arial';
+      while(x.measureText(txt).width>W-120&&fs>16){fs-=1;x.font='600 '+fs+'px Inter, Arial';}
+      x.fillStyle=SHARE_AC;
+      x.fillText(txt,W/2,y+36);
+    } else {
+      x.fillStyle='rgba(255,255,255,.3)';x.font='500 23px Inter, Arial';
+      x.fillText('nikt nie trafił',W/2,y+36);
+    }
+    y+=rowH;
+    x.strokeStyle='rgba(255,255,255,.08)';x.lineWidth=1;
+    x.beginPath();x.moveTo(90,y-26);x.lineTo(W-90,y-26);x.stroke();
+  });
+  y+=gap;
+  x.fillStyle=SHARE_AC;x.font='700 36px Oswald, Arial';
+  x.fillText('TABELA · TOP '+table.length,W/2,y);
+  y+=tabHead-24;
+  table.forEach((r,i)=>{
+    x.fillStyle=i===0?SHARE_AC:'#FFFFFF';x.font=(i===0?'700':'600')+' 30px Inter, Arial';
+    x.fillText((i+1)+'. '+r.name+' — '+r.total+' pkt',W/2,y);
+    y+=tabRow;
+  });
+  x.fillStyle='rgba(255,255,255,.45)';x.font='500 24px Inter, Arial';
+  x.fillText((CFG.subtitle||'')+' · '+new Date().toLocaleDateString('pl-PL'),W/2,H-46);
+  c.toBlob(async blob=>{
+    if(!blob){alert('Nie udało się wygenerować obrazka.');return;}
+    const fname='raport-'+st.toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]+/g,'-')+'.png';
+    const file=new File([blob],fname,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:'Raport rundy'});return;}catch(e){if(e&&e.name==='AbortError')return;}
+    }
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;
+    document.body.appendChild(a);a.click();a.remove();
+    flash('Obrazek pobrany 📥');
+  },'image/png');
 }
 function botReportIfComplete(st,MX){
   const stMs=Object.entries(MX).map(([id,x])=>({id,...x})).filter(x=>(x.stage||'Mecz')===st);
