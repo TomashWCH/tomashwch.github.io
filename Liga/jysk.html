@@ -302,6 +302,8 @@
   .champ-row:last-child{border-bottom:0}
   .champ-row.hit{background:linear-gradient(90deg,#E4F2E4,transparent);border-radius:8px}
   .champ-row .cwho{flex:1;font-weight:600}
+  .jkr{display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:12.5px;color:var(--ink);background:#FBF6E6;border:1px dashed var(--gold);border-radius:10px;padding:8px 10px;cursor:pointer;line-height:1.35}
+  .jkr input{width:auto;margin-top:2px}
   /* ---------- Paski postępu odznak ---------- */
   .bprog-row{display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12.5px}
   .bprog-row .bn{width:92px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -458,7 +460,7 @@ function standings(){
     let correct=0;
     Object.entries(MATCH).forEach(([mid,m])=>{
       if(!m.done)return;const pr=PRED[mid]&&PRED[mid][pid];
-      if(pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))correct++;
+      if(pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))correct+=(pr.j?2:1);
     });
     const start=Number(p.start||0);
     const champPts=(CFG.champion&&CHAMP[pid]===CFG.champion)?champPtsVal():0;
@@ -575,7 +577,7 @@ function tabbar(){
     <button class="${TAB==='tabela'?'on':''}" onclick="go('tabela')"><span class="dot">🏆</span>Tabela</button>
     <button class="${TAB==='kicktipp'?'on':''}" onclick="go('kicktipp')"><span class="dot">⭐</span>Kicktipp</button>
     <button class="${TAB==='staty'?'on':''}" onclick="go('staty')"><span class="dot">📈</span>Staty</button>
-    <button class="${TAB==='czat'?'on':''}" onclick="go('czat')"><span class="dot">💬</span>Czat</button>
+    <button class="${TAB==='czat'?'on':''}" onclick="go('czat')"><span class="dot">💬</span>Czat${TAB!=='czat'&&newChatCount()>0?'<span class="ndot"></span>':''}</button>
   </div>`;
 }
 function go(t){TAB=t;render();}
@@ -587,7 +589,7 @@ function renderMain(){
   let body = TAB==='tabela' ? viewTable() : TAB==='rozegrane' ? viewDone() : TAB==='kicktipp' ? viewKicktipp() : TAB==='staty' ? viewStaty() : TAB==='czat' ? viewChat() : viewMatches();
   $('app').innerHTML=header(ex)+`<div class="wrap">${body}<div class="foot">Kursy to szacunek na podstawie siły drużyn — nie zakłady.<br>1 pkt = dokładny wynik meczu.</div></div>`;
   tabbar();
-  if(TAB==='czat'){ const ci=$('chatin'); if(ci){ci.value=CHAT_DRAFT;} window.scrollTo(0,document.body.scrollHeight); }
+  if(TAB==='czat'){ const ci=$('chatin'); if(ci){ci.value=CHAT_DRAFT;} window.scrollTo(0,document.body.scrollHeight); try{localStorage.setItem(chatSeenKey(),String(Date.now()));}catch(e){} }
   Object.keys(MC_DRAFT).forEach(mid=>{const el=$('mc_'+mid); if(el&&MC_DRAFT[mid])el.value=MC_DRAFT[mid];});
   // check podium & notif
   checkAndShowPodium();
@@ -597,7 +599,7 @@ function renderMain(){
 
 function viewMatches(){
   const list=sortedMatches();
-  const home=champCard()+viewSytuacja()+viewReflektor()+viewFeed();
+  const home=deadlineBanner()+champCard()+viewSytuacja()+viewReflektor()+viewFeed();
   if(!list.length)return home+`<div class="card center muted">Brak meczów. Admin je wkrótce doda.</div>`;
   const open=list.filter(m=>statusOf(m)==='open');
   const live=list.filter(m=>statusOf(m)==='live');
@@ -610,7 +612,7 @@ function viewMatches(){
 function viewDone(){
   const all=sortedMatches();
   const done=all.filter(m=>statusOf(m)==='done');
-  if(!done.length)return `<div class="card center muted">Nie ma jeszcze meczów z wpisanym wynikiem.</div>`;
+  if(!done.length)return bracketView()||`<div class="card center muted">Nie ma jeszcze meczów z wpisanym wynikiem.</div>`;
   const notDone=all.filter(m=>statusOf(m)!=='done');
   const currentStage = notDone.length ? notDone[0].stage : done[done.length-1].stage;
   const groups={};
@@ -628,7 +630,7 @@ function viewDone(){
       if(open) html += ms.map(matchCard).join('');
     }
   });
-  return html;
+  return bracketView()+html;
 }
 
 function matchCard(m){
@@ -654,11 +656,13 @@ function matchCard(m){
   const myPred = PRED[m.id]&&PRED[m.id][ME];
   let pickArea='';
   if(st==='open'){
-    if(myPred){pickArea=`<div class="mypick"><div class="saved">Twój typ: <b>${myPred.h} : ${myPred.a}</b> · zapisany 🔒</div></div>`;}
-    else{pickArea=`<div class="mypick"><div class="pickrow">
+    if(myPred){pickArea=`<div class="mypick"><div class="saved">Twój typ: <b>${myPred.h} : ${myPred.a}</b>${myPred.j?' <b style="color:var(--gold-d)">⭐×2</b>':''} · zapisany 🔒</div></div>`;}
+    else{const jFree=!jokerUsedInStage(m.stage||'Mecz');
+      pickArea=`<div class="mypick"><div class="pickrow">
       <input id="h_${m.id}" type="number" min="0" max="20" inputmode="numeric" placeholder="0">
       <span class="vs">:</span>
       <input id="a_${m.id}" type="number" min="0" max="20" inputmode="numeric" placeholder="0"></div>
+      ${jFree?`<label class="jkr"><input type="checkbox" id="j_${m.id}"> ⭐ Postaw Jokera — punkty za ten mecz ×2 (jeden na etap, nieodwołalny)</label>`:`<div class="hint center" style="margin-top:6px">⭐ Joker na ten etap już postawiony.</div>`}
       <button class="primary" style="margin-top:10px" onclick="savePick('${m.id}')">Zapisz typ</button>
       <div class="hint center">${(m.stage||'')!=='Faza grupowa'?'Puchar: liczy się wynik po 90 minutach (dogrywka i karne nie liczą się do wyniku).<br>':''}Po zapisaniu nie zmienisz typu. Zamyka się <span class="cd" data-kick="${m.kickoff}">${fmtCountdown(m.kickoff-Date.now())}</span> (${fmt(m.kickoff)}).</div></div>`;}
   }else if(!myPred){
@@ -670,7 +674,7 @@ function matchCard(m){
     const rows=Object.entries(PART).map(([pid,p])=>{
       const pr=PRED[m.id]&&PRED[m.id][pid];
       const hit=m.done&&pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as);
-      const val=pr?`<span class="pv ${m.done&&!hit?'miss':''}">${pr.h}:${pr.a}</span>`:`<span class="pv miss">—</span>`;
+      const val=pr?`<span class="pv ${m.done&&!hit?'miss':''}">${pr.j?'⭐':''}${pr.h}:${pr.a}</span>`:`<span class="pv miss">—</span>`;
       const react=pr?pickReactHtml(m.id,pid):'';
       return `<div class="prow ${hit?'hit':''}"><span class="nm">${esc(p.name)}</span><span style="display:flex;align-items:center;gap:8px">${react}${val}</span></div>`;
     }).join('');
@@ -693,7 +697,7 @@ function matchCard(m){
       <div style="text-align:center;padding:0 14px 12px"><button class="icon-btn" style="width:100%" onclick="toggleExp('${m.id}')">${open?'Ukryj typy ⌃':'Pokaż typy ('+nPicks+') ⌄'}</button></div>
       ${open?`${oddsHtml}${picksHtml}`:''}</div>`;
   }
-  return `<div class="match${isFinal?' final-match':''}">
+  return `<div class="match${isFinal?' final-match':''}" id="mrow_${m.id}">
     <div class="m-top"><span class="stage">${esc(m.stage||'')}</span><span>${fmt(m.kickoff)} ${pill}</span></div>
     <div class="teams">
       <div class="team"><span class="flag" onclick="showTeamHistory('${m.home}')" style="cursor:pointer">${H.f}</span><span class="tname team-name-clk" onclick="showTeamHistory('${m.home}')">${esc(H.pl)}</span></div>
@@ -727,8 +731,10 @@ function savePick(mid){
   const hh=parseInt(h,10), aa=parseInt(a,10);
   if(isNaN(hh)||isNaN(aa)||hh<0||aa<0){alert('Wynik musi być liczbą ≥ 0.');return;}
   const m=MATCH[mid]; const H=team(m.home).pl, A=team(m.away).pl;
-  if(!confirm(`Zapisać typ ${H} ${hh} : ${aa} ${A}?\nPo zapisaniu NIE da się go już zmienić.`))return;
-  db.ref('predictions/'+mid+'/'+ME).set({h:hh,a:aa,ts:Date.now()})
+  const jok=$('j_'+mid)&&$('j_'+mid).checked;
+  if(jok&&jokerUsedInStage(m.stage||'Mecz')){alert('Joker na ten etap jest już postawiony.');return;}
+  if(!confirm(`Zapisać typ ${H} ${hh} : ${aa} ${A}?${jok?'\n⭐ Z JOKEREM — punkty za ten mecz ×2!':''}\nPo zapisaniu NIE da się go już zmienić.`))return;
+  db.ref('predictions/'+mid+'/'+ME).set(jok?{h:hh,a:aa,ts:Date.now(),j:1}:{h:hh,a:aa,ts:Date.now()})
     .catch(e=>{ alert('Nie zapisano. Mecz mógł się już rozpocząć.'); });
 }
 
@@ -775,8 +781,8 @@ function stageChampions(){
       if(!PART[pid])return;
       const ph=Number(pr.h),pa=Number(pr.a),hs=Number(m.hs),as=Number(m.as);
       sc[pid]=sc[pid]||{pts:0,exact:0};
-      if(ph===hs&&pa===as){sc[pid].pts+=3;sc[pid].exact++;}
-      else if(Math.sign(ph-pa)===Math.sign(hs-as))sc[pid].pts+=1;
+      if(ph===hs&&pa===as){sc[pid].pts+=3*(pr.j?2:1);sc[pid].exact++;}
+      else if(Math.sign(ph-pa)===Math.sign(hs-as))sc[pid].pts+=1*(pr.j?2:1);
     }));
     const arr=Object.entries(sc).filter(([,v])=>v.pts>0);
     if(!arr.length)return;
@@ -848,7 +854,22 @@ function viewTable(){
   const histBtn=`<button class="icon-btn" style="width:100%;margin-top:8px" onclick="showHistory()">🏛️ Hala sław${Object.keys(ARCHIVE).length?' ('+Object.keys(ARCHIVE).length+')':''}</button>`;
   return `<div class="sec-h">Klasyfikacja</div><div class="lb">${rows}</div>
     <div class="hint center">Punkty = startowe + 1 za każdy dokładnie trafiony wynik + ${champPtsVal()} za trafionego mistrza turnieju. Strzałka = ruch od ostatniego wyniku. 🎖️ = mistrz rundy (najlepszy typer zakończonego etapu). Stuknij nazwisko, by zobaczyć profil.</div>${podiumBtn}${histBtn}
-    ${bracketView()}`;
+    ${regulaminCard()}`;
+}
+function regulaminCard(){
+  const dl=champLockTs();
+  return `<details class="card" style="margin-top:10px">
+    <summary style="font-family:Oswald;font-weight:700;font-size:15px;cursor:pointer;padding:2px 0">📜 Regulamin zabawy</summary>
+    <div style="font-size:13.5px;line-height:1.55;margin-top:8px">
+      <b>Typowanie.</b> Typujesz dokładny wynik po 90 minutach — dogrywka i rzuty karne nie liczą się do wyniku. Typ zapisujesz raz i nie można go zmienić. Typowanie meczu zamyka się o pierwszym gwizdku. Typy innych graczy ${CFG.showBeforeKickoff?'są widoczne od razu':'zobaczysz dopiero po gwizdku'}.<br><br>
+      <b>Klasyfikacja klasyczna.</b> 1 pkt za dokładnie trafiony wynik + punkty startowe (dorobek sprzed apki).<br><br>
+      <b>Klasyfikacja Kicktipp.</b> 3 pkt za dokładny wynik, 1 pkt za trafiony rezultat (zwycięzca lub remis) + punkty startowe.<br><br>
+      <b>⭐ Joker.</b> Raz na każdy etap możesz przy zapisie typu postawić Jokera — punkty za ten mecz liczą się ×2 w obu klasyfikacjach. Joker jest nieodwołalny jak typ.<br><br>
+      <b>🏆 Mistrz turnieju.</b> Wytypowanie zwycięzcy całego turnieju to +${champPtsVal()} pkt w obu klasyfikacjach. ${dl?`Typowanie mistrza zamyka się ${fmt(dl)}.`:''} Rozstrzygnięcie po finale.<br><br>
+      <b>🎖️ Mistrz rundy.</b> Po każdym zakończonym etapie najlepszy typer rundy (punkty Kicktipp w obrębie etapu, przy remisie liczba dokładnych) dostaje emblemat przy nazwisku.
+      ${CFG.rulesNote?`<br><br><b>Ustalenia ligi.</b> ${esc(CFG.rulesNote)}`:''}
+    </div>
+  </details>`;
 }
 function kicktippStandings(){
   return Object.entries(PART).map(([pid,p])=>{
@@ -858,8 +879,8 @@ function kicktippStandings(){
       const pr=PRED[mid]&&PRED[mid][pid];
       if(!pr)return;
       const ph=Number(pr.h),pa=Number(pr.a),hs=Number(m.hs),as=Number(m.as);
-      if(ph===hs&&pa===as){exact++;pts+=3;}
-      else if(Math.sign(ph-pa)===Math.sign(hs-as)){tend++;pts+=1;}
+      if(ph===hs&&pa===as){exact++;pts+=3*(pr.j?2:1);}
+      else if(Math.sign(ph-pa)===Math.sign(hs-as)){tend++;pts+=1*(pr.j?2:1);}
     });
     const start=Number(p.start||0);
     const champPts=(CFG.champion&&CHAMP[pid]===CFG.champion)?champPtsVal():0;
@@ -973,7 +994,29 @@ function renderAdmin(){
       </div>
     </div>`:''}
 
+    ${(function(){
+      const age=backupAgeDays();
+      const warn=age===null||age>=7;
+      return `<div class="card" style="${warn?'border:1.5px solid var(--gold);background:#FBF6E6;':''}padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:20px">💾</span>
+        <div style="flex:1;font-size:13px">${age===null?'<b>Brak kopii zapasowej z tego urządzenia.</b> Po ostatnich przygodach — warto.':(warn?`Ostatnia kopia: <b>${age} dni temu</b> — pora na świeżą.`:`Ostatnia kopia: ${age===0?'dzisiaj':age+' dni temu'} ✓`)}</div>
+        <button class="icon-btn" onclick="downloadBackup()">Pobierz kopię bazy</button>
+      </div>`;})()}
     <div class="sec-h">Mecze i wyniki</div>
+    ${(function(){
+      const pend=sortedMatches().filter(m=>!m.done&&m.kickoff+105*60000<Date.now());
+      if(!pend.length)return '';
+      const rows=pend.map(m=>`<div class="listitem" style="gap:8px">
+        <div class="g" style="font-size:13px"><b>${team(m.home).f} ${esc(team(m.home).pl)} – ${esc(team(m.away).pl)} ${team(m.away).f}</b><div class="muted" style="font-size:11px">${esc(m.stage||'')} · ${fmt(m.kickoff)}</div></div>
+        <input type="number" id="qh_${m.id}" placeholder="d" style="width:52px;padding:6px">
+        <input type="number" id="qa_${m.id}" placeholder="g" style="width:52px;padding:6px">
+        <button class="icon-btn mini" onclick="saveResult('${m.id}','q')">Zapisz</button>
+      </div>`).join('');
+      return `<div class="card" style="border:1.5px solid #C2533B">
+        <div style="font-family:Oswald;font-weight:700;font-size:14px;margin-bottom:6px">🔴 Do wpisania (${pend.length}) — mecze już zakończone bez wyniku</div>
+        ${rows}
+        <div class="hint">Wynik po 90 minutach. Remis w pucharze? Dogrywkę/karne uzupełnisz w pełnym widoku meczu niżej.</div>
+      </div>`;})()}
     <div class="card">
       <div class="hint" style="margin-bottom:10px">Wpisz wynik po 90 min (liczy się do punktów). Dla pucharów dogrywkę i karne rozwiniesz przyciskiem „+ dogrywka / karne".</div>
       ${mlist||'<div class="muted">Brak meczów.</div>'}
@@ -1003,7 +1046,15 @@ function renderAdmin(){
         <textarea id="bulk" rows="5" placeholder="POR CRO 03.07 01:00 1/16 finału&#10;ESP AUT 02.07 21:00 1/16 finału&#10;ARG-CPV 04.07 00:00 1/16 finału"></textarea>
         <div class="hint">Jedna linia = jeden mecz: <b>KOD1 KOD2 DD.MM GG:MM Etap</b>. Kody jak w doborze drużyn powyżej (np. POR, CRO, ARG). Czas polski. Dla fazy grupowej możesz dopisać literę grupy na końcu, np. <b>POL ARG 12.06 21:00 Faza grupowa C</b>.</div>
         <button class="primary" onclick="addBulk()">Dodaj z listy</button>
-        <button class="icon-btn" style="width:100%;margin-top:8px" onclick="repairStages()">🔧 Napraw polskie znaki w etapach</button>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+        <label>Wklej wiele wyników naraz</label>
+        <textarea id="bulkres" rows="5" placeholder="MEX RSA 2:0&#10;GER PAR 1:1 k3:4&#10;BEL SEN 2:2 d3:2"></textarea>
+        <div class="hint">Jedna linia = jeden wynik: <b>KOD1 KOD2 H:A</b> (po 90 minutach). Możesz dopisać dogrywkę <b>dX:Y</b> i karne <b>kX:Y</b> — apka sama ustawi awans przy remisie. Mecze z identycznym wynikiem pominę.</div>
+        <button class="primary" onclick="addBulkResults()">Wpisz wyniki z listy</button>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+        <button class="icon-btn" style="width:100%" onclick="repairStages()">🔧 Napraw polskie znaki w etapach</button>
         <div class="hint">Użyj, jeśli w apce widzisz zepsute nazwy typu „finaĹ‚u” — jednym kliknięciem ujednolici nazwy etapów we wszystkich meczach, bez utraty typów i wyników.</div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
@@ -1023,6 +1074,8 @@ function renderAdmin(){
       <div class="row2"><input id="lname" value="${esc(CFG.leagueName||'LIGA TYPERA JYSK')}"><button class="icon-btn" onclick="saveName()">Zapisz</button></div>
       <label style="margin-top:14px">Podtytuł (nazwa turnieju w nagłówku)</label>
       <div class="row2"><input id="lsub" value="${esc(CFG.subtitle||'TYPER MUNDIAL 2026')}"><button class="icon-btn" onclick="saveSub()">Zapisz</button></div>
+      <label style="margin-top:14px">📜 Ustalenia ligi (dopisek do regulaminu w Tabeli)</label>
+      <div class="row2"><input id="lrules" value="${esc(CFG.rulesNote||'')}" placeholder="np. przegrany turnieju stawia pączki"><button class="icon-btn" onclick="saveRulesNote()">Zapisz</button></div>
       <label style="margin-top:14px">🏆 Typowanie mistrza turnieju</label>
       <div class="hint" style="margin-bottom:6px">Domyślnie typowanie zamyka się przy pierwszym gwizdku pierwszego meczu. Jeśli turniej już trwa, ustaw własny termin poniżej — typowanie otworzy się ponownie do tej daty (spośród drużyn, które zostały).</div>
       <label>Termin typowania (puste = pierwszy mecz)</label>
@@ -1060,8 +1113,9 @@ function addPart(){
 }
 function saveStart(pid){const v=parseInt($('st_'+pid).value||'0',10)||0;db.ref('participants/'+pid+'/start').set(v).then(()=>flash('Zapisano'));}
 function delPart(pid){if(confirm('Usunąć uczestnika '+PART[pid].name+'?'))db.ref('participants/'+pid).remove();}
-function saveResult(mid){
-  const h=$('rh_'+mid).value,a=$('ra_'+mid).value;
+function saveResult(mid,pref){
+  pref=pref||'r';
+  const h=$(pref+'h_'+mid).value,a=$(pref+'a_'+mid).value;
   if(h===''||a===''){alert('Wpisz wynik po 90 minutach (górne pola).');return;}
   const hs=parseInt(h,10),as=parseInt(a,10),m=MATCH[mid];
   const ko=(m.stage||'')!=='Faza grupowa';
@@ -1095,6 +1149,7 @@ function importKnock(){
 function toggleShow(){db.ref('config/showBeforeKickoff').set(!CFG.showBeforeKickoff);}
 function saveName(){db.ref('config/leagueName').set($('lname').value.trim()||'LIGA TYPERA JYSK').then(()=>flash('Zapisano'));}
 function saveSub(){db.ref('config/subtitle').set($('lsub').value.trim()||'TYPER').then(()=>flash('Zapisano'));}
+function saveRulesNote(){db.ref('config/rulesNote').set($('lrules').value.trim()||null).then(()=>flash('Zapisano'));}
 function saveChampDl(){
   const v=$('champdl').value;
   const ts=v?new Date(v).getTime():null;
@@ -1311,8 +1366,8 @@ function buildStageReport(st,MX){
     if(!PART[pid])return;
     const ph=Number(pr.h),pa=Number(pr.a),hs=Number(m.hs),as=Number(m.as);
     sc[pid]=sc[pid]||{pts:0,exact:0};
-    if(ph===hs&&pa===as){sc[pid].pts+=3;sc[pid].exact++;exTotal++;}
-    else if(Math.sign(ph-pa)===Math.sign(hs-as))sc[pid].pts+=1;
+    if(ph===hs&&pa===as){sc[pid].pts+=3*(pr.j?2:1);sc[pid].exact++;exTotal++;}
+    else if(Math.sign(ph-pa)===Math.sign(hs-as))sc[pid].pts+=1*(pr.j?2:1);
   }));
   const arr=Object.entries(sc).sort((a,b)=>b[1].pts-a[1].pts||b[1].exact-a[1].exact);
   const pl_m=(n)=>n===1?'mecz':((n%10>=2&&n%10<=4&&(n%100<12||n%100>14))?'mecze':'meczów');
@@ -1327,7 +1382,7 @@ function buildStageReport(st,MX){
   const totals=Object.entries(PART).map(([pid,p])=>{
     let c=0;Object.entries(MX).forEach(([mid,m])=>{
       if(!m.done)return;const pr=PRED[mid]&&PRED[mid][pid];
-      if(pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))c++;});
+      if(pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as))c+=(pr.j?2:1);});
     return {name:p.name,total:Number(p.start||0)+c};
   }).sort((a,b)=>b.total-a.total);
   if(totals.length){
@@ -1336,20 +1391,105 @@ function buildStageReport(st,MX){
   }
   return out;
 }
-function maybeBotReport(mid,hs,as){
-  const m=MATCH[mid]; if(!m)return;
-  const st=m.stage||'Mecz';
-  const stMs=Object.entries(MATCH).map(([id,x])=>({id,...x})).filter(x=>(x.stage||'Mecz')===st);
-  const allDone=stMs.every(x=>x.id===mid?true:!!x.done);
-  if(!allDone)return;
+function chatSeenKey(){return 'chatseen_'+firebaseConfig.projectId+'_'+(ME||'x');}
+function newChatCount(){
+  let last=0;try{last=Number(localStorage.getItem(chatSeenKey())||0);}catch(e){}
+  if(!last){try{localStorage.setItem(chatSeenKey(),String(Date.now()));}catch(e){} return 0;}
+  return Object.values(CHAT).filter(m=>m&&m.ts>last&&m.pid!==ME).length;
+}
+/* ---------- v4: Joker ×2 ---------- */
+function jokerMult(mid,pid){const pr=PRED[mid]&&PRED[mid][pid];return (pr&&pr.j)?2:1;}
+function jokerUsedInStage(st){
+  return Object.entries(PRED).some(([mid,byP])=>{
+    const m=MATCH[mid];return m&&(m.stage||'Mecz')===st&&byP[ME]&&byP[ME].j;
+  });
+}
+/* ---------- v4: banner deadline ---------- */
+function deadlineBanner(){
+  if(!ME)return '';
+  const soon=sortedMatches().filter(m=>statusOf(m)==='open'&&!(PRED[m.id]&&PRED[m.id][ME])&&m.kickoff>Date.now()&&m.kickoff-Date.now()<3*3600000);
+  if(!soon.length)return '';
+  const m=soon[0];
+  return `<div class="card" style="border:1.5px solid #C2533B;background:#FBEDEA;display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px 14px" onclick="scrollToMatch('${m.id}')">
+    <span style="font-size:24px">⏰</span><div style="font-size:13.5px;line-height:1.4"><b>${team(m.home).f} ${esc(team(m.home).pl)} – ${esc(team(m.away).pl)} ${team(m.away).f}</b> zamyka się za <b class="cd" data-kick="${m.kickoff}">${fmtCountdown(m.kickoff-Date.now())}</b>, a nie masz typu${soon.length>1?` (i jeszcze ${soon.length-1} innych meczów czeka)`:''}. Stuknij, by przejść.</div></div>`;
+}
+function scrollToMatch(mid){const el=$('mrow_'+mid);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});}
+/* ---------- v4: kopia zapasowa ---------- */
+function backupKey(){return 'backup_'+firebaseConfig.projectId;}
+function backupAgeDays(){
+  let t=0;try{t=Number(localStorage.getItem(backupKey())||0);}catch(e){}
+  return t?Math.floor((Date.now()-t)/86400000):null;
+}
+function downloadBackup(){
+  db.ref().once('value').then(s=>{
+    const blob=new Blob([JSON.stringify(s.val())],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    const d=new Date(),p=n=>String(n).padStart(2,'0');
+    a.download=(CFG.leagueName||'liga-typera').toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]+/g,'-')+'-kopia-'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'.json';
+    a.click();
+    try{localStorage.setItem(backupKey(),String(Date.now()));}catch(e){}
+    flash('Kopia pobrana 💾');render();
+  }).catch(e=>alert(dbErrMsg(e)));
+}
+/* ---------- v4: hurtowy import wyników ---------- */
+function addBulkResults(){
+  const raw=($('bulkres')&&$('bulkres').value.trim())||'';
+  if(!raw){alert('Wklej listę wyników.');return;}
+  const up={};let ok=0;const errs=[],same=[];const touched={};const MX={};
+  Object.entries(MATCH).forEach(([id,x])=>{MX[id]=Object.assign({},x);});
+  raw.split(/\n+/).forEach(line=>{
+    const t=line.trim().split(/\s+/).filter(Boolean);if(!t.length)return;
+    if(t.length<3||!/^\d+:\d+$/.test(t[2])){errs.push(line);return;}
+    const h=t[0].toUpperCase(),a=t[1].toUpperCase();
+    const hs=parseInt(t[2].split(':')[0],10),as=parseInt(t[2].split(':')[1],10);
+    let fhs=null,fas=null,ph=null,pa=null;
+    t.slice(3).forEach(x=>{
+      let mm=x.match(/^d(\d+):(\d+)$/i);if(mm){fhs=+mm[1];fas=+mm[2];return;}
+      mm=x.match(/^k(\d+):(\d+)$/i);if(mm){ph=+mm[1];pa=+mm[2];}
+    });
+    const cands=Object.entries(MATCH).filter(([id,m])=>m.home===h&&m.away===a);
+    if(!cands.length){errs.push(line+'   ← nie znalazłam meczu '+h+'-'+a);return;}
+    const pick=cands.find(([id,m])=>!m.done)||cands[0];
+    const mid=pick[0],m=pick[1];
+    if(m.done&&Number(m.hs)===hs&&Number(m.as)===as){same.push(line);return;}
+    const ko=(m.stage||'')!=='Faza grupowa';
+    let adv=null;
+    if(ko&&hs===as){
+      if(fhs!=null&&fhs!==fas)adv=fhs>fas?'home':'away';
+      else if(ph!=null&&ph!==pa)adv=ph>pa?'home':'away';
+    }
+    const u={hs,as,done:true,rts:Date.now(),fhs,fas,ph,pa,adv,pens:null,aet:null,pen:null};
+    Object.entries(u).forEach(([k,v])=>{up['matches/'+mid+'/'+k]=v;});
+    MX[mid]=Object.assign({},MX[mid],{hs,as,done:true});
+    touched[m.stage||'Mecz']=true;ok++;
+  });
+  if(!ok){alert('Nie zapisałam nic.'+(errs.length?'\nProblemy:\n'+errs.join('\n'):'')+(same.length?'\nJuż wpisane tak samo: '+same.length:''));return;}
+  if(!confirm('Zapisać '+ok+' wyników?'+(same.length?'\nPominę '+same.length+' już wpisanych tak samo.':'')+(errs.length?'\nNie rozpoznam '+errs.length+' linii (pokażę po zapisie).':'')))return;
+  const prevC=ranksMap(standings()),prevK=ranksMap(kicktippStandings());
+  db.ref('meta').update({prevRanksClassic:prevC,prevRanksKick:prevK});
+  db.ref().update(up).then(()=>{
+    if($('bulkres'))$('bulkres').value='';
+    flash('Zapisano '+ok+' wyników ✅');
+    if(errs.length)alert('Nierozpoznane linie:\n'+errs.join('\n'));
+    Object.keys(touched).forEach(st=>botReportIfComplete(st,MX));
+  }).catch(e=>alert(dbErrMsg(e)));
+}
+function botReportIfComplete(st,MX){
+  const stMs=Object.entries(MX).map(([id,x])=>({id,...x})).filter(x=>(x.stage||'Mecz')===st);
+  if(!stMs.length||!stMs.every(x=>!!x.done))return;
   const key='r_'+st.replace(/[.#$/\[\]]/g,'_');
   db.ref('meta/botSent/'+key).transaction(cur=>cur===true?undefined:true,(err,committed)=>{
     if(err||!committed)return;
-    const MX={};Object.entries(MATCH).forEach(([id,x])=>{MX[id]=Object.assign({},x);});
-    MX[mid]=Object.assign({},MX[mid],{hs:Number(hs),as:Number(as),done:true});
     const rep=buildStageReport(st,MX);
     if(rep)db.ref('chat').push({pid:'__bot__',name:'⚽ Liga Bot',text:rep.slice(0,900),ts:Date.now()});
   });
+}
+function maybeBotReport(mid,hs,as){
+  const m=MATCH[mid]; if(!m)return;
+  const st=m.stage||'Mecz';
+  const MX={};Object.entries(MATCH).forEach(([id,x])=>{MX[id]=Object.assign({},x);});
+  MX[mid]=Object.assign({},MX[mid],{hs:Number(hs),as:Number(as),done:true});
+  botReportIfComplete(st,MX);
 }
 /* ---------- v2: chat ---------- */
 function viewChat(){
@@ -1566,7 +1706,8 @@ function showProfile(pid){
       const earned=new Set(earnedBadges(pid).map(b=>b.n));
       const prog=badgeProgress(pid).filter(b=>!earned.has(b.n));
       if(!prog.length)return '';
-      return `<div style="margin-top:14px"><b style="font-size:13px">Do zdobycia:</b>${prog.map(b=>`<div class="bprog-row"><span style="width:22px">${b.e}</span><span class="bn">${esc(b.n)}</span><div class="bprog-bar"><div class="bprog-fill" style="width:${Math.min(100,Math.round(b.cur/b.goal*100))}%"></div></div><span class="bprog-num">${b.cur}/${b.goal}</span></div>`).join('')}</div>`;
+      return `<div style="margin-top:14px"><b style="font-size:13px">Do zdobycia:</b>${prog.map(b=>`<div class="bprog-row"><span style="width:22px">${b.e}</span><span class="bn">${esc(b.n)}</span><div class="bprog-bar"><div class="bprog-fill" style="width:${Math.min(100,Math.round(b.cur/b.goal*100))}%"></div></div><span class="bprog-num">${b.cur}/${b.goal}</span></div>`).join('')}
+      <button class="icon-btn mini" style="margin-top:8px" onclick="showBadgeCatalog('${pid}')">Wszystkie odznaki (${BADGE_CATALOG.length}) ›</button></div>`;
     })()}
     ${pid===ME?`<button class="primary" style="margin-top:16px;width:100%" onclick="shareCard()">📤 Udostępnij swój wynik</button>`:''}
   </div></div>`;
@@ -1770,6 +1911,44 @@ function positionChartCard(){
     <div class="hint">Miejsce w klasyfikacji po każdym rozegranym meczu (góra = 1. miejsce).</div>
   </div>`;
 }
+const BADGE_CATALOG=[
+ {e:'🎯',n:'Snajper',how:'Traf dokładny wynik 5 razy w turnieju.'},
+ {e:'🔮',n:'Jasnowidz',how:'Traf 3 dokładne wyniki z rzędu (pomiędzy mogą być mecze bez typu, ale nie pudła).'},
+ {e:'🔥',n:'Gorąca ręka',how:'Miej aktualną serię 2+ dokładnych trafień — odznaka żyje, dopóki nie spudłujesz.'},
+ {e:'💯',n:'Komplet rundy',how:'Traf dokładnie WSZYSTKIE swoje typy w jednym etapie (min. 2 typy).'},
+ {e:'🐉',n:'Pogromca gigantów',how:'Traf dokładny wynik meczu, w którym zwycięzca miał wg kursów mniej niż 25% szans.'},
+ {e:'🧱',n:'Murowany',how:'Traf dokładnie wynik 0:0.'},
+ {e:'🎪',n:'Showman',how:'Traf dokładnie wynik z różnicą co najmniej 4 goli.'},
+ {e:'🦄',n:'Inaczej niż wszyscy',how:'Traf wynik, który wytypowałeś tylko Ty — cała reszta typowała inaczej.'},
+ {e:'🥇',n:'Pierwszy strzał',how:'Zalicz pierwsze dokładne trafienie całego turnieju (może być wspólne).'},
+ {e:'🗳️',n:'Sumienny',how:'Obstaw każdy rozegrany mecz turnieju (min. 5 meczów, zero opuszczonych).'},
+ {e:'📉',n:'Underdog wierny',how:'3 razy postaw na zwycięstwo drużyny z szansą poniżej 35% (nie musisz trafić).'},
+ {e:'🤝',n:'Zgodny z tłumem',how:'5 razy wytypuj dokładnie to samo co większość grupy.'},
+ {e:'⚡',n:'Błyskawica',how:'Zapisz typ ponad 48 godzin przed gwizdkiem.'},
+ {e:'🐢',n:'Ostatnia chwila',how:'Zapisz typ w ostatnich 15 minutach przed zamknięciem.'},
+ {e:'🌙',n:'Nocna zmiana',how:'Zapisz typ między północą a 5 rano.'},
+ {e:'🏅',n:'Finalista',how:'Obstaw mecz finałowy.'}
+];
+function showBadgeCatalog(pid){
+  pid=pid||ME;
+  const p=PART[pid]; if(!p)return;
+  const have=new Set(earnedBadges(pid).map(b=>b.n));
+  const prog={}; badgeProgress(pid).forEach(b=>{prog[b.n]=b;});
+  const rows=BADGE_CATALOG.map(b=>{
+    const got=have.has(b.n);
+    const pr=!got&&prog[b.n]?`<div class="bprog-bar" style="margin-top:5px"><div class="bprog-fill" style="width:${Math.round(prog[b.n].cur/prog[b.n].goal*100)}%"></div></div><div class="muted" style="font-size:11px;margin-top:2px">${prog[b.n].cur}/${prog[b.n].goal}</div>`:'';
+    return `<div style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line);${got?'':'opacity:.55'}">
+      <span style="font-size:24px;filter:${got?'none':'grayscale(1)'}">${b.e}</span>
+      <div style="flex:1"><b>${b.n}</b> ${got?'<span style="color:var(--green);font-weight:700">✓ zdobyta</span>':''}
+        <div class="muted" style="font-size:12px;line-height:1.4">${b.how}</div>${pr}</div>
+    </div>`;
+  }).join('');
+  const ov=document.createElement('div');
+  ov.className='ovl'; ov.id='badgeCatalog'; ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="sheet"><button class="x" onclick="this.closest('.ovl').remove()">Zamknij</button>
+    <h3>🎖️ Odznaki — ${esc(p.name)} (${have.size}/${BADGE_CATALOG.length})</h3>${rows}</div>`;
+  document.body.appendChild(ov);
+}
 function earnedBadges(pid){
   const b=[]; const dm=sortedMatches().filter(m=>m.done);
   let exactTotal=0,predTotal=0,cur=0,best=0,zero=false,giant=false,missedAny=false;
@@ -1868,7 +2047,61 @@ function badgesRoster(){
     const ic=bs.length?bs.map(x=>x.e).join(' '):'<span class="muted" style="font-size:12px">—</span>';
     return `<div class="prow" style="cursor:pointer" onclick="showProfile('${p}')"><span class="nm">${esc(PART[p].name)}</span><span style="font-size:18px">${ic}</span></div>`;
   }).join('');
-  return `<div class="card">${rows}<div class="hint" style="margin-top:8px">Stuknij gracza, by zobaczyć opisy odznak.</div></div>`;
+  return `<div class="card">${rows}
+    <button class="icon-btn" style="width:100%;margin-top:10px" onclick="showBadgeCatalog(ME)">🎖️ Zobacz wszystkie odznaki i jak je zdobyć</button></div>`;
+}
+/* ---------- v5: nowe statystyki ---------- */
+function statProfil(){
+  const rows=Object.entries(PART).map(([pid,p])=>{
+    let n=0,g=0,home=0,draw=0,away=0;
+    Object.entries(PRED).forEach(([mid,byP])=>{
+      const pr=byP[pid]; if(!pr||!MATCH[mid])return;
+      n++; g+=Number(pr.h)+Number(pr.a);
+      if(pr.h>pr.a)home++; else if(pr.h<pr.a)away++; else draw++;
+    });
+    if(!n)return null;
+    return {name:p.name,n,avg:(g/n).toFixed(1),home:Math.round(home/n*100),draw:Math.round(draw/n*100),away:Math.round(away/n*100)};
+  }).filter(Boolean).sort((a,b)=>b.avg-a.avg);
+  if(!rows.length)return '<div class="card muted">Brak typów.</div>';
+  const html=rows.map(r=>`<div class="prow"><span class="nm">${esc(r.name)}</span>
+    <span class="muted" style="font-size:12px;text-align:right">śr. <b>${r.avg}</b> gola/typ · 🏠${r.home}% 🤝${r.draw}% ✈️${r.away}%</span></div>`).join('');
+  return `<div class="card">${html}<div class="hint" style="margin-top:8px">Śr. goli w typie mówi, kto wierzy w festiwal strzelecki. 🏠 = typy na gospodarza, 🤝 na remis, ✈️ na gościa.</div></div>`;
+}
+function statForma(){
+  const dm=sortedMatches().filter(m=>m.done).slice(-5);
+  if(dm.length<2)return '<div class="card muted">Za mało rozegranych meczów.</div>';
+  const rows=Object.entries(PART).map(([pid,p])=>{
+    let pts=0;const ic=dm.map(m=>{
+      const pr=PRED[m.id]&&PRED[m.id][pid];
+      if(!pr)return '<span style="opacity:.35">·</span>';
+      const mult=pr.j?2:1;
+      if(Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as)){pts+=3*mult;return '🟢';}
+      if(Math.sign(pr.h-pr.a)===Math.sign(m.hs-m.as)){pts+=1*mult;return '🟡';}
+      return '🔴';
+    }).join('');
+    return {name:p.name,pts,ic};
+  }).sort((a,b)=>b.pts-a.pts);
+  const html=rows.map((r,i)=>`<div class="prow"><span class="nm">${i===0&&r.pts>0?'🔥 ':''}${esc(r.name)}</span>
+    <span style="display:flex;align-items:center;gap:8px"><span style="letter-spacing:2px">${r.ic}</span><b style="font-family:Oswald">${r.pts}</b></span></div>`).join('');
+  return `<div class="card">${html}<div class="hint" style="margin-top:8px">Punkty Kicktipp z ostatnich ${dm.length} meczów. 🟢 dokładne · 🟡 rezultat · 🔴 pudło · · bez typu.</div></div>`;
+}
+function statPulapki(){
+  const dm=sortedMatches().filter(m=>m.done);
+  const scored=dm.map(m=>{
+    const prs=Object.entries(PRED[m.id]||{}).filter(([p2])=>PART[p2]);
+    if(prs.length<2)return null;
+    const hits=prs.filter(([,pr])=>Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as)).length;
+    return {m,total:prs.length,hits};
+  }).filter(Boolean);
+  if(!scored.length)return '<div class="card muted">Za mało danych.</div>';
+  const easy=scored.filter(x=>x.hits>0).sort((a,b)=>b.hits-a.hits||a.total-b.total).slice(0,3);
+  const traps=scored.filter(x=>x.hits===0);
+  const line=x=>`<div class="prow"><span class="nm">${team(x.m.home).f} ${esc(team(x.m.home).pl)} ${x.m.hs}:${x.m.as} ${esc(team(x.m.away).pl)} ${team(x.m.away).f}</span><span class="muted" style="font-size:12px">${x.hits}/${x.total} trafiło</span></div>`;
+  return `<div class="card">
+    ${easy.length?`<b style="font-size:13px">🎯 Najczęściej trafiane:</b>${easy.map(line).join('')}`:''}
+    <b style="font-size:13px;display:block;margin-top:${easy.length?'10px':'0'}">🪤 Mecze-pułapki (nikt nie trafił): ${traps.length} z ${scored.length}</b>
+    ${traps.length?`<div class="hint" style="margin-top:4px">Ostatnia pułapka: ${(x=>`${team(x.m.home).pl} ${x.m.hs}:${x.m.as} ${team(x.m.away).pl}`)(traps[traps.length-1])}</div>`:''}
+  </div>`;
 }
 function statBlizniacza(){
   if(!ME||!PART[ME])return '<div class="card muted">Zaloguj się, by zobaczyć swój bliźniak.</div>';
@@ -1932,6 +2165,9 @@ function viewStaty(){
   if(!Object.keys(PART).length)return '<div class="card center muted">Brak uczestników.</div>';
   if(!sortedMatches().some(m=>m.done))return '<div class="card center muted">Statystyki pojawią się po pierwszych wynikach.</div>';
   return `<div class="sec-h">Raport po rundzie</div>`+roundReportCard()
+    +`<div class="sec-h">Forma — ostatnie mecze</div>`+statForma()
+    +`<div class="sec-h">DNA typera</div>`+statProfil()
+    +`<div class="sec-h">Pewniaki i pułapki</div>`+statPulapki()
     +`<div class="sec-h">Twój bliźniak i nemezis</div>`+statBlizniacza()
     +`<div class="sec-h">Pojedynek graczy</div>`+h2hCard()
     +`<div class="sec-h">Ranking odwagi</div>`+statOdwaga()
