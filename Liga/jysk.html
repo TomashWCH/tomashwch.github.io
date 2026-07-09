@@ -1090,7 +1090,7 @@ function importKnock(){
   if(!confirm('Dodać 6 potwierdzonych meczów 1/16 finału?\nIstniejące mecze, typy i wyniki zostają nietknięte.'))return;
   const up={};
   KNOCK.forEach(m=>{up['matches/'+m.id]={home:m.home,away:m.away,kickoff:new Date(m.iso).getTime(),stage:m.stage};});
-  db.ref().update(up).then(()=>flash('Dodano mecze 1/16')).catch(()=>alert('Nie udało się dodać — sprawdź internet.'));
+  db.ref().update(up).then(()=>flash('Dodano mecze 1/16')).catch(e=>alert(dbErrMsg(e)));
 }
 function toggleShow(){db.ref('config/showBeforeKickoff').set(!CFG.showBeforeKickoff);}
 function saveName(){db.ref('config/leagueName').set($('lname').value.trim()||'LIGA TYPERA JYSK').then(()=>flash('Zapisano'));}
@@ -1139,7 +1139,14 @@ function archiveTournament(){
     .then(()=>db.ref('config/champion').remove())
     .then(()=>db.ref('config/champDeadline').remove())
     .then(()=>{flash('Turniej zarchiwizowany 🏁');$('arc_name').value='';})
-    .catch(()=>alert('Coś poszło nie tak — sprawdź internet i spróbuj ponownie.'));
+    .catch(e=>alert(dbErrMsg(e)));
+}
+function dbErrMsg(e){
+  const c=String((e&&(e.code||e.message))||'').toUpperCase();
+  if(c.indexOf('PERMISSION')>=0) return 'Baza odrzuciła zapis — to nie problem z internetem, tylko z uprawnieniami. Admin: w konsoli Firebase (Realtime Database → Reguły) gałąź, do której apka pisze, musi mieć zezwolenie ".write".';
+  if(c.indexOf('NETWORK')>=0||c.indexOf('TIMEOUT')>=0||c.indexOf('UNAVAILABLE')>=0||(typeof navigator!=='undefined'&&navigator.onLine===false)) return 'Brak połączenia z internetem — sprawdź zasięg i spróbuj ponownie.';
+  if(c.indexOf('MAX_RETR')>=0||c.indexOf('SIZE')>=0||c.indexOf('LARGE')>=0) return 'Zapis odrzucony — dane mogą być za duże (np. zdjęcie).';
+  return 'Nie udało się zapisać: '+String((e&&e.message)||e||'nieznany błąd');
 }
 
 /* ---------- v2: helpers ---------- */
@@ -1205,7 +1212,7 @@ function champLocked(){const t=champLockTs();return t!=null&&Date.now()>=t;}
 function saveChampPick(v){
   if(champLocked()){alert('Turniej już trwa — typów mistrza nie można zmieniać.');render();return;}
   if(!v){return;}
-  db.ref('champ/'+ME).set(v).then(()=>flash('Typ na mistrza zapisany 🏆')).catch(()=>alert('Nie zapisano — sprawdź internet.'));
+  db.ref('champ/'+ME).set(v).then(()=>flash('Typ na mistrza zapisany 🏆')).catch(e=>alert(dbErrMsg(e)));
 }
 function champCard(){
   const lockTs=champLockTs(); if(lockTs==null)return '';
@@ -1369,7 +1376,7 @@ function sendChat(){
   const v=(CHAT_DRAFT||'').trim(); if(!v)return;
   db.ref('chat').push({pid:ME,name:PART[ME].name,text:v.slice(0,300),ts:Date.now()})
     .then(()=>{CHAT_DRAFT='';const ci=$('chatin');if(ci)ci.value='';})
-    .catch(()=>alert('Nie wysłano — sprawdź internet.'));
+    .catch(e=>alert(dbErrMsg(e)));
 }
 function clearChat(){if(confirm('Wyczyścić cały czat?'))db.ref('chat').remove().then(()=>flash('Czat wyczyszczony'));}
 
@@ -1570,7 +1577,7 @@ function toggleEmojiGrid(){const g=$('emogrid');if(g)g.style.display=(g.style.di
 function setAvatar(v){
   db.ref('participants/'+ME+'/av').set(v)
     .then(()=>{ if(PART[ME])PART[ME].av=v; flash(v?'Awatar zapisany ✅':'Awatar usunięty'); closeProfile(); showProfile(ME); })
-    .catch(()=>alert('Nie zapisano — sprawdź internet.'));
+    .catch(e=>alert(dbErrMsg(e)));
 }
 function compressAvatar(dataUrl, cb, onErr){
   const img=new Image();
@@ -1704,7 +1711,7 @@ function roundReportCard(){
 }
 function sendReport(){
   const t=roundReportText(); if(!t)return;
-  db.ref('chat').push({pid:'report',name:'📋 Raport',text:t,ts:Date.now()}).then(()=>{flash('Wysłano na czat');go('czat');}).catch(()=>alert('Nie wysłano — sprawdź internet.'));
+  db.ref('chat').push({pid:'report',name:'📋 Raport',text:t,ts:Date.now()}).then(()=>{flash('Wysłano na czat');go('czat');}).catch(e=>alert(dbErrMsg(e)));
 }
 function ptsFor(pr,m){return pr&&Number(pr.h)===Number(m.hs)&&Number(pr.a)===Number(m.as)?1:0;}
 function h2hCard(){
@@ -1965,7 +1972,7 @@ function repairStages(){
   if(!n){alert('Wszystkie etapy wyglądają dobrze — nie ma czego naprawiać. 👍');return;}
   const lista=Object.entries(zmiany).map(([od,na])=>'„'+od+'” → „'+na+'”').join('\n');
   if(!confirm('Naprawić nazwy etapów w '+n+' meczach?\n\n'+lista+'\n\nTypy i wyniki zostają bez zmian.'))return;
-  db.ref().update(up).then(()=>flash('Naprawiono etapy w '+n+' meczach ✅')).catch(()=>alert('Błąd zapisu — sprawdź internet.'));
+  db.ref().update(up).then(()=>flash('Naprawiono etapy w '+n+' meczach ✅')).catch(e=>alert(dbErrMsg(e)));
 }
 function addBulk(){
   const raw=($('bulk').value||'').trim(); if(!raw){alert('Wklej listę meczów.');return;}
@@ -1982,7 +1989,7 @@ function addBulk(){
     if(gm){stage=gm[1];grp=gm[2].toUpperCase();}
     stage=canonStage(stage)||stage;
     if(!TEAMS[h]||!TEAMS[a]||h===a||!date||!time||!/^\d{1,2}\.\d{1,2}$/.test(date)||!/^\d{1,2}:\d{2}$/.test(time)){errs.push(line);return;}
-    const exists=Object.values(MATCH).some(mm=>mm.stage===stage&&((mm.home===h&&mm.away===a)||(mm.home===a&&mm.away===h)));
+    const exists=Object.values(MATCH).some(mm=>(canonStage(mm.stage)||mm.stage)===stage&&((mm.home===h&&mm.away===a)||(mm.home===a&&mm.away===h)));
     if(exists){dupes.push(line);return;}
     const dp=date.split('.'),iso='2026-'+dp[1].padStart(2,'0')+'-'+dp[0].padStart(2,'0')+'T'+time.padStart(5,'0');
     const k=new Date(iso).getTime(); if(isNaN(k)){errs.push(line);return;}
@@ -2141,7 +2148,7 @@ function openImgPicker(){
         if(!compressed || compressed.indexOf('data:image')!==0 || compressed.length<200){ alert('Nie udało się przetworzyć zdjęcia. Możliwe, że jest w formacie HEIC (z iPhone\u2019a) — zrób zrzut ekranu tego zdjęcia i wyślij zrzut, albo wybierz inne.'); return; }
         if(!confirm('Wysłać zdjęcie na czat?'))return;
         db.ref('chat').push({pid:ME,name:PART[ME].name,img:compressed,ts:Date.now()})
-          .catch(()=>alert('Nie wysłano — za duże lub brak internetu.'));
+          .catch(e=>alert(dbErrMsg(e)));
       }, ()=>alert('Nie udało się wczytać zdjęcia (może format HEIC lub uszkodzony plik). Zrób zrzut ekranu i wyślij zrzut, albo wybierz inne zdjęcie.'));
     };
     reader.readAsDataURL(file);
