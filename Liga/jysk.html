@@ -591,6 +591,11 @@ function askAdmin(){
   else alert('Niepoprawne hasło administratora.');
 }
 function logout(){ME=null;localStorage.removeItem('typer_jysk_pid');render();}
+function queueTestPush(){
+  db.ref('notify/pending').push({type:'test',pid:ME||null,ts:Date.now()})
+    .then(()=>flash('Zlecenie w kolejce 🧪 — push przyjdzie po najbliższym przebiegu automatu (do ~5 min; możesz też odpalić Run workflow).'))
+    .catch(e=>alert(dbErrMsg(e)));
+}
 function updatePushDiag(){
   const el=$('pushdiag'); if(!el)return;
   if(typeof ONESIGNAL_APP_ID==='undefined'||ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){el.innerHTML='🔕 OneSignal nieskonfigurowany w tym pliku.';return;}
@@ -610,6 +615,7 @@ function updatePushDiag(){
           4. Service workery: <code style="font-size:10px">${scopes.join(' · ')||'brak'}</code><br>
           5. App ID ligi: <code style="font-size:10px">${ONESIGNAL_APP_ID}</code>
           ${!optedIn?`<br><button class="icon-btn mini" style="margin-top:6px" onclick="askPush();setTimeout(updatePushDiag,2500)">Włącz teraz i odśwież status</button>`:''}
+          <br><button class="icon-btn mini" style="margin-top:6px" onclick="queueTestPush()">🧪 Wyślij testowy push przez automat</button>
           <br><button class="icon-btn mini" style="margin-top:6px" onclick="updatePushDiag()">↻ Odśwież status</button>`;
       }catch(e){el.textContent='Błąd odczytu OneSignal: '+((e&&e.message)||e);}
     };
