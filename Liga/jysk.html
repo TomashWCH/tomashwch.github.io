@@ -1138,16 +1138,19 @@ function renderAdmin(){
       <div class="hint" style="margin-bottom:10px">Turniej się skończył? Zarchiwizuj go, żeby zapisać wyniki w historii, i zacznij kolejny na czystej planszy — bez zakładania nowej apki i bez utraty listy graczy.</div>
       <label>Nazwa archiwizowanego turnieju (do historii)</label>
       <input id="arc_name" value="${esc(CFG.leagueName||'')}">
-      <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">
-        <b style="font-size:13px">Ustawienia nowej edycji (od razu po archiwizacji):</b>
-        <label style="margin-top:8px">Nazwa nowego turnieju (podtytuł w nagłówku)</label>
-        <input id="ne_sub" placeholder="np. TYPER EURO 2028">
+      <button class="danger" style="width:100%;margin-top:10px" onclick="archiveTournament()">🏁 Zakończ i zarchiwizuj turniej</button>
+      <div class="hint" style="margin-top:6px">Zapisuje edycję w historii i czyści planszę. Nowy turniej skonfigurujesz osobno — od razu albo za pół roku.</div>
+      <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
+        <b style="font-size:13px">🆕 Rozpocznij nowy turniej (na czystej planszy):</b>
+        <label style="margin-top:8px">Nazwa turnieju (podtytuł w nagłówku)</label>
+        <input id="ne_sub" placeholder="np. TYPER LIGA MISTRZÓW 2026/27">
         <label style="margin-top:8px">Punkty za trafionego mistrza</label>
         <input id="ne_pts" type="number" min="1" value="${champPtsVal()}">
         <label style="margin-top:8px">Termin typowania mistrza (puste = pierwszy gwizdek)</label>
         <input id="ne_dl" type="datetime-local">
+        <button class="primary" style="width:100%;margin-top:10px" onclick="startNewEdition()">🆕 Ustaw nowy turniej</button>
+        <div class="hint">Ustawia nazwę i zasady. Mecze dodasz jak zwykle — pojedynczo albo hurtowo — a typowanie mistrza otworzy się automatycznie.</div>
       </div>
-      <button class="danger" style="width:100%;margin-top:10px" onclick="archiveTournament()">🏁 Zakończ turniej i rozpocznij nową edycję</button>
       ${Object.keys(ARCHIVE).length?`<div class="hint" style="margin-top:8px">Zarchiwizowanych turniejów: ${Object.keys(ARCHIVE).length}. Zobacz je w zakładce Tabela → Historia turniejów.</div>`:''}
     </div>
     <div class="foot">Panel widoczny tylko dla Ciebie. Uczestnicy logują się swoim hasłem.</div>
@@ -1241,17 +1244,22 @@ function archiveTournament(){
     .then(()=>db.ref('champ').remove())
     .then(()=>db.ref('config/champion').remove())
     .then(()=>db.ref('config/champDeadline').remove())
-    .then(()=>{
-      const cfg={};
-      const sub=($('ne_sub')&&$('ne_sub').value.trim())||'';
-      const pts=Number(($('ne_pts')&&$('ne_pts').value)||0);
-      const dl=($('ne_dl')&&$('ne_dl').value)||'';
-      if(sub)cfg['config/subtitle']=sub;
-      if(pts>0)cfg['config/champPts']=pts;
-      if(dl){const t=new Date(dl).getTime();if(!isNaN(t))cfg['config/champDeadline']=t;}
-      return Object.keys(cfg).length?db.ref().update(cfg):null;
-    })
-    .then(()=>{flash('Nowa edycja gotowa 🏁');if($('arc_name'))$('arc_name').value='';})
+    .then(()=>{flash('Turniej zarchiwizowany 🏁');if($('arc_name'))$('arc_name').value='';})
+    .catch(e=>alert(dbErrMsg(e)));
+}
+function startNewEdition(){
+  const sub=($('ne_sub')&&$('ne_sub').value.trim())||'';
+  const pts=Number(($('ne_pts')&&$('ne_pts').value)||0);
+  const dl=($('ne_dl')&&$('ne_dl').value)||'';
+  if(!sub){alert('Podaj nazwę nowego turnieju.');return;}
+  if(Object.keys(MATCH).length&&!confirm('Uwaga: na planszy są jeszcze mecze z poprzednich rozgrywek ('+Object.keys(MATCH).length+').\nJeśli to koniec starego turnieju — najpierw go zarchiwizuj.\n\nMimo to ustawić nowy turniej?'))return;
+  if(!confirm('Rozpocząć nowy turniej „'+sub+'"?\nPunkty za mistrza: '+(pts>0?pts:champPtsVal())))return;
+  const cfg={'config/subtitle':sub};
+  if(pts>0)cfg['config/champPts']=pts;
+  if(dl){const t=new Date(dl).getTime();if(!isNaN(t))cfg['config/champDeadline']=t;}
+  else cfg['config/champDeadline']=null;
+  cfg['config/champion']=null;
+  db.ref().update(cfg).then(()=>{flash('Nowy turniej ustawiony 🆕');if($('ne_sub'))$('ne_sub').value='';})
     .catch(e=>alert(dbErrMsg(e)));
 }
 function dbErrMsg(e){
