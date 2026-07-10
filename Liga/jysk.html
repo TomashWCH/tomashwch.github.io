@@ -328,6 +328,18 @@
 <div id="app"><div class="wrap"><div class="card center" style="margin-top:40px">Ładowanie…</div></div></div>
 <div id="tabs"></div>
 
+<!-- OneSignal Web Push SDK -->
+<script src="https://cdn.onesignal.com/sdks/OneSignalSDK.page.js" defer></script>
+<script>
+const ONESIGNAL_APP_ID='b71033e4-8af0-4305-bf76-96da9d26d6c2';
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')!==0){
+  OneSignalDeferred.push(async function(OneSignal){
+    await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false} });
+  });
+}
+</script>
+
 <!-- Firebase compat SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -579,6 +591,19 @@ function askAdmin(){
   else alert('Niepoprawne hasło administratora.');
 }
 function logout(){ME=null;localStorage.removeItem('typer_jysk_pid');render();}
+async function askPush(){
+  if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){flash('Powiadomienia jeszcze nie skonfigurowane przez admina.');return;}
+  if(!window.OneSignal){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
+  OneSignalDeferred.push(async function(OneSignal){
+    const perm = OneSignal.Notifications.permission;
+    if(perm){flash('Powiadomienia już włączone 🔔');return;}
+    await OneSignal.Notifications.requestPermission();
+    if(OneSignal.Notifications.permission){
+      try{ await OneSignal.login(String(ME)); }catch(e){}
+      flash('Powiadomienia włączone 🔔');
+    }
+  });
+}
 
 /* ---------- Main (participant) ---------- */
 function tabbar(){
@@ -596,6 +621,7 @@ function go(t){TAB=t;render();}
 function renderMain(){
   const me=PART[ME];
   const ex=`<div style="text-align:right"><div style="font-family:Oswald;font-weight:600;font-size:14px">${esc(me.name)}</div>
+    <button class="icon-btn" id="pushBtn" style="margin-top:4px;padding:4px 8px" onclick="askPush()">🔔</button>
     <button class="icon-btn" style="margin-top:4px;padding:4px 8px" onclick="logout()">Wyloguj</button></div>`;
   let body = TAB==='tabela' ? viewTable() : TAB==='rozegrane' ? viewDone() : TAB==='kicktipp' ? viewKicktipp() : TAB==='staty' ? viewStaty() : TAB==='czat' ? viewChat() : viewMatches();
   $('app').innerHTML=header(ex)+`<div class="wrap">${body}<div class="foot">Kursy to szacunek na podstawie siły drużyn — nie zakłady.<br>1 pkt = dokładny wynik meczu.</div></div>`;
@@ -1182,7 +1208,10 @@ function saveResult(mid,pref){
   db.ref('matches/'+mid).update({hs,as,done:true,rts:Date.now(),
     fhs:haveF?parseInt(fh,10):null, fas:haveF?parseInt(fa,10):null,
     ph:haveP?parseInt(ph,10):null, pa:haveP?parseInt(pa,10):null,
-    adv:(ko&&adv)?adv:null, pens:null, aet:null, pen:null}).then(()=>{flash('Wynik zapisany');maybeBotReport(mid,hs,as);});
+    adv:(ko&&adv)?adv:null, pens:null, aet:null, pen:null}).then(()=>{flash('Wynik zapisany');maybeBotReport(mid,hs,as);queueResultNotify(mid,m,hs,as);});
+}
+function queueResultNotify(mid,m,hs,as){
+  db.ref('notify/pending').push({type:'result', mid, home:m.home, away:m.away, hs, as, ts:Date.now()});
 }
 function delMatch(mid){if(confirm('Usunąć mecz?')){db.ref('matches/'+mid).remove();db.ref('predictions/'+mid).remove();}}
 function addMatch(){
