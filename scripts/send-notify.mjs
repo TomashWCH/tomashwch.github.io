@@ -116,7 +116,11 @@ async function processApp(app) {
     if (pending) {
       for (const [key, item] of Object.entries(pending)) {
         let ok = true;
-        if (item.type === 'result') {
+        if (item.type === 'test') {
+          ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey,
+            '🧪 Test powiadomień', `Działa! Liga Typera ${app.label} może wysyłać pushe. 🎉`);
+        }
+        else if (item.type === 'result') {
           const title = `⚽ Wynik: ${teamName(item.home)} ${item.hs}:${item.as} ${teamName(item.away)}`;
           const message = `Sprawdź swój typ i tabelę w Lidze Typera ${app.label}!`;
           ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
