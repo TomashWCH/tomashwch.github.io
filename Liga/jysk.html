@@ -593,14 +593,16 @@ function askAdmin(){
 function logout(){ME=null;localStorage.removeItem('typer_jysk_pid');render();}
 async function askPush(){
   if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){flash('Powiadomienia jeszcze nie skonfigurowane przez admina.');return;}
-  if(!window.OneSignal){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
+  if(!window.OneSignalDeferred){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
   OneSignalDeferred.push(async function(OneSignal){
-    const perm = OneSignal.Notifications.permission;
-    if(perm){flash('Powiadomienia już włączone 🔔');return;}
-    await OneSignal.Notifications.requestPermission();
-    if(OneSignal.Notifications.permission){
+    try{
+      await OneSignal.Notifications.requestPermission();      // nic nie robi, jeśli zgoda już jest
+      if(!OneSignal.Notifications.permission){flash('Bez zgody przeglądarki nie dam rady 😕');return;}
+      await OneSignal.User.PushSubscription.optIn();          // właściwy zapis do TEJ apki (zgoda to za mało)
       try{ await OneSignal.login(String(ME)); }catch(e){}
-      flash('Powiadomienia włączone 🔔');
+      flash('Powiadomienia włączone dla tej ligi 🔔');
+    }catch(e){
+      flash('Błąd powiadomień: '+((e&&e.message)||e));
     }
   });
 }
