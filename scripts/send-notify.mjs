@@ -49,11 +49,12 @@ async function getAccessToken(serviceAccountJson) {
 }
 
 async function sendPush(appId, restKey, title, message) {
+  const auth = restKey.startsWith('os_v2') ? `Key ${restKey}` : `Basic ${restKey}`;
   const res = await fetch('https://onesignal.com/api/v1/notifications', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Authorization': `Basic ${restKey}`,
+      'Authorization': auth,
     },
     body: JSON.stringify({
       app_id: appId,
@@ -63,11 +64,12 @@ async function sendPush(appId, restKey, title, message) {
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  if (!res.ok || data.errors) {
     console.error('OneSignal send failed:', res.status, JSON.stringify(data));
-  } else {
-    console.log('Push sent:', title, '-', message, '| id:', data.id);
+    return false;
   }
+  console.log('Push sent:', title, '-', message, '| id:', data.id);
+  return true;
 }
 
 async function fbGet(dbUrl, path, token) {
@@ -113,12 +115,14 @@ async function processApp(app) {
     const pending = await fbGet(app.dbUrl, 'notify/pending', token);
     if (pending) {
       for (const [key, item] of Object.entries(pending)) {
+        let ok = true;
         if (item.type === 'result') {
           const title = `⚽ Wynik: ${teamName(item.home)} ${item.hs}:${item.as} ${teamName(item.away)}`;
           const message = `Sprawdź swój typ i tabelę w Lidze Typera ${app.label}!`;
-          await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
+          ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
         }
-        await fbDelete(app.dbUrl, `notify/pending/${key}`, token);
+        if (ok) await fbDelete(app.dbUrl, `notify/pending/${key}`, token);
+        else console.error(`[${app.label}] zlecenie ${key} zostaje w kolejce — ponowię przy następnym przebiegu.`);
       }
     }
   } catch (e) {
@@ -136,8 +140,9 @@ async function processApp(app) {
         if (msLeft > 0 && msLeft <= REMIND_MINUTES * 60000) {
           const title = `⏰ Zbliża się mecz!`;
           const message = `${teamName(m.home)} – ${teamName(m.away)} już za ${Math.round(msLeft / 60000)} min. Zdąż wytypować wynik!`;
-          await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
-          await fbPatch(app.dbUrl, `matches/${mid}`, token, { remindSent: true });
+          const ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
+          if (ok) await fbPatch(app.dbUrl, `matches/${mid}`, token, { remindSent: true });
+          else console.error(`[${app.label}] przypomnienie o ${m.home}-${m.away} NIE wysłane — spróbuję przy następnym przebiegu.`);
         }
       }
     }
