@@ -1097,6 +1097,8 @@ function renderAdmin(){
         <textarea id="bulkres" rows="5" placeholder="MEX RSA 2:0&#10;GER PAR 1:1 k3:4&#10;BEL SEN 2:2 d3:2"></textarea>
         <div class="hint">Jedna linia = jeden wynik: <b>KOD1 KOD2 H:A</b> (po 90 minutach). Możesz dopisać dogrywkę <b>dX:Y</b> i karne <b>kX:Y</b> — apka sama ustawi awans przy remisie. Mecze z identycznym wynikiem pominę.</div>
         <button class="primary" onclick="addBulkResults()">Wpisz wyniki z listy</button>
+        <button class="icon-btn" id="fetchres_btn" style="width:100%;margin-top:8px" onclick="fetchOnlineResults()">🌐 Pobierz wyniki z internetu</button>
+        <div class="hint">Źródło: otwarte dane openfootball (GitHub, mundial 2026) — wynik po 90 min, dogrywki i karne rozpoznawane automatycznie. Zobaczysz listę do zatwierdzenia przed zapisem; wyniki wpisane inaczej niż w internecie nie nadpiszą się bez osobnej zgody.</div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
         <button class="icon-btn" style="width:100%" onclick="repairStages()">🔧 Napraw polskie znaki w etapach</button>
@@ -1539,6 +1541,66 @@ function addBulkResults(){
     if(errs.length)alert('Nierozpoznane linie:\n'+errs.join('\n'));
     Object.keys(touched).forEach(st=>botReportIfComplete(st,MX));
   }).catch(e=>alert(dbErrMsg(e)));
+}
+/* ---------- v8: automatyczne wyniki z internetu (openfootball, domena publiczna) ---------- */
+const RESULTS_API='https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
+const API_TEAM={'Algeria':'DZA','Argentina':'ARG','Australia':'AUS','Austria':'AUT','Belgium':'BEL','Bosnia & Herzegovina':'BIH','Brazil':'BRA','Canada':'CAN','Cape Verde':'CPV','Colombia':'COL','Croatia':'CRO','Curaçao':'CUW','Czech Republic':'CZE','DR Congo':'COD','Ecuador':'ECU','Egypt':'EGY','England':'ENG','France':'FRA','Germany':'GER','Ghana':'GHA','Haiti':'HAI','Iran':'IRN','Iraq':'IRQ','Ivory Coast':'CIV','Japan':'JPN','Jordan':'JOR','Mexico':'MEX','Morocco':'MAR','Netherlands':'NED','New Zealand':'NZL','Norway':'NOR','Panama':'PAN','Paraguay':'PAR','Portugal':'POR','Qatar':'QAT','Saudi Arabia':'KSA','Scotland':'SCO','Senegal':'SEN','South Africa':'RSA','South Korea':'KOR','Spain':'ESP','Sweden':'SWE','Switzerland':'SUI','Tunisia':'TUN','Turkey':'TUR','USA':'USA','Uruguay':'URU','Uzbekistan':'UZB'};
+async function fetchOnlineResults(){
+  const btn=$('fetchres_btn'); if(btn){btn.disabled=true;btn.textContent='⏳ Pobieram…';}
+  let data;
+  try{
+    const r=await fetch(RESULTS_API+'?t='+Math.floor(Date.now()/60000));
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    data=await r.json();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='🌐 Pobierz wyniki z internetu';}
+    alert('Nie udało się pobrać wyników z internetu.\nŹródło (openfootball na GitHubie) nie odpowiada — spróbuj za chwilę albo wpisz wyniki ręcznie.\n\nSzczegóły: '+((e&&e.message)||e));return;
+  }
+  if(btn){btn.disabled=false;btn.textContent='🌐 Pobierz wyniki z internetu';}
+  const ams=(data&&data.matches)||[];
+  const usedIds=new Set();const upNew={},upConf={};const touched={};const MX={};
+  Object.entries(MATCH).forEach(([id,x])=>{MX[id]=Object.assign({},x);});
+  const news=[],confl=[];let sameN=0;
+  ams.forEach(am=>{
+    const sc=am.score;if(!sc||!sc.ft)return;
+    const h=API_TEAM[am.team1],a=API_TEAM[am.team2];
+    if(!h||!a)return;   // sloty W97/L101 itd. — mecz jeszcze bez obsady
+    const cands=Object.entries(MATCH).filter(([id,mm])=>!usedIds.has(id)&&((mm.home===h&&mm.away===a)||(mm.home===a&&mm.away===h)));
+    if(!cands.length)return;
+    cands.sort((x,y)=>(x[1].done===y[1].done?0:(x[1].done?1:-1))||x[1].kickoff-y[1].kickoff);
+    const mid=cands[0][0],mm=cands[0][1];usedIds.add(mid);
+    const sw=mm.home===a;
+    const pick=arr=>arr?(sw?[Number(arr[1]),Number(arr[0])]:[Number(arr[0]),Number(arr[1])]):null;
+    const ft=pick(sc.ft),et=pick(sc.et),p=pick(sc.p);
+    const HS=ft[0],AS=ft[1];
+    if(mm.done&&Number(mm.hs)===HS&&Number(mm.as)===AS){sameN++;return;}
+    const ko=(mm.stage||'')!=='Faza grupowa';
+    let ADV=null;
+    if(ko&&HS===AS){
+      if(p&&p[0]!==p[1])ADV=p[0]>p[1]?'home':'away';
+      else if(et&&et[0]!==et[1])ADV=et[0]>et[1]?'home':'away';
+    }
+    const u={hs:HS,as:AS,done:true,rts:Date.now(),fhs:ko&&et?et[0]:null,fas:ko&&et?et[1]:null,ph:ko&&p?p[0]:null,pa:ko&&p?p[1]:null,adv:ADV,pens:null,aet:null,pen:null};
+    const target=mm.done?upConf:upNew;
+    Object.entries(u).forEach(([k,v])=>{target['matches/'+mid+'/'+k]=v;});
+    const line='• '+team(mm.home).pl+' '+HS+':'+AS+' '+team(mm.away).pl+(et?' (po dogr. '+et[0]+':'+et[1]+')':'')+(p?' (k. '+p[0]+':'+p[1]+')':'');
+    if(mm.done){confl.push(line+'   [w apce: '+mm.hs+':'+mm.as+']');}
+    else{news.push(line);MX[mid]=Object.assign({},MX[mid],{hs:HS,as:AS,done:true});touched[mm.stage||'Mecz']=true;}
+  });
+  if(!news.length&&!confl.length){alert('Wszystko aktualne — internet nie ma nic nowego. ✅'+(sameN?'\nWyników zgodnych z apką: '+sameN:''));return;}
+  const doWrite=(up,label)=>{
+    const prevC=ranksMap(standings()),prevK=ranksMap(kicktippStandings());
+    db.ref('meta').update({prevRanksClassic:prevC,prevRanksKick:prevK});
+    return db.ref().update(up).then(()=>flash(label)).catch(e=>alert(dbErrMsg(e)));
+  };
+  if(news.length&&confirm('🌐 Nowe wyniki z internetu ('+news.length+'):\n\n'+news.join('\n')+'\n\nZapisać? (wynik po 90 min — zgodnie z regulaminem)')){
+    doWrite(upNew,'Zapisano '+news.length+' wyników 🌐').then(()=>{
+      Object.keys(touched).forEach(st=>botReportIfComplete(st,MX));
+    });
+  }
+  if(confl.length&&confirm('⚠️ Internet podaje INNE wyniki niż wpisane w apce ('+confl.length+'):\n\n'+confl.join('\n')+'\n\nNadpisać wersją z internetu? (jeśli poprawiałeś coś świadomie — wybierz Anuluj)')){
+    doWrite(upConf,'Nadpisano '+confl.length+' wyników');
+  }
 }
 /* ---------- v6: przypomnienie o typowaniu ---------- */
 function remindOnChat(){
