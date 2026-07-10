@@ -23,19 +23,21 @@ const TEAMS = {
 };
 const teamName = c => TEAMS[c] || c;
 
+// App ID wpisane NA SZTYWNO — identyczne jak w plikach HTML (są jawne z natury).
+// Dzięki temu nie mogą się rozjechać z aplikacją. Tajne pozostają tylko klucze REST.
 const APPS = [
   {
     label: 'P258',
     dbUrl: process.env.FIREBASE_DB_URL_P258,
     serviceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_P258,
-    oneSignalAppId: process.env.ONESIGNAL_APP_ID_P258,
+    oneSignalAppId: '6f33addf-12e1-48a0-81f9-8afd37127133',
     oneSignalRestKey: process.env.ONESIGNAL_REST_KEY_P258,
   },
   {
     label: 'JYSK',
     dbUrl: process.env.FIREBASE_DB_URL_JYSK,
     serviceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JYSK,
-    oneSignalAppId: process.env.ONESIGNAL_APP_ID_JYSK,
+    oneSignalAppId: 'b71033e4-8af0-4305-bf76-96da9d26d6c2',
     oneSignalRestKey: process.env.ONESIGNAL_REST_KEY_JYSK,
   },
 ];
@@ -95,12 +97,34 @@ async function fbDelete(dbUrl, path, token) {
   if (!res.ok) throw new Error(`Firebase DELETE ${path} failed: ${res.status}`);
 }
 
+async function preflightOneSignal(app) {
+  // Diagnostyka: do KTÓREJ apki OneSignal celują sekrety i ilu ma subskrybentów.
+  try {
+    const auth = app.oneSignalRestKey.startsWith('os_v2') ? `Key ${app.oneSignalRestKey}` : `Basic ${app.oneSignalRestKey}`;
+    const res = await fetch(`https://onesignal.com/api/v1/players?app_id=${app.oneSignalAppId}&limit=1`, { headers: { Authorization: auth } });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error(`[${app.label}] PREFLIGHT: OneSignal odrzucił parę AppID+klucz (HTTP ${res.status}) — App ID i REST key nie pasują do siebie lub klucz nieważny.`, JSON.stringify(d).slice(0, 200));
+      return false;
+    }
+    console.log(`[${app.label}] PREFLIGHT: sekret ONESIGNAL_APP_ID zaczyna się od "${String(app.oneSignalAppId).slice(0, 8)}" | subskrypcji w tej apce: ${d.total_count}`);
+    if (!d.total_count) {
+      console.error(`[${app.label}] PREFLIGHT: ta apka OneSignal ma ZERO subskrybentów — sekrety celują w inną apkę niż plik HTML (porównaj początek App ID z piątą linią diagnostyki w aplikacji).`);
+    }
+    return true;
+  } catch (e) {
+    console.error(`[${app.label}] PREFLIGHT padł:`, e.message);
+    return false;
+  }
+}
+
 async function processApp(app) {
   if (!app.dbUrl || !app.serviceAccountJson || !app.oneSignalAppId || !app.oneSignalRestKey) {
     console.log(`[${app.label}] pominięto — brak kompletu sekretów (jeszcze nieskonfigurowane).`);
     return;
   }
   console.log(`[${app.label}] sprawdzam...`);
+  await preflightOneSignal(app);
 
   let token;
   try {
