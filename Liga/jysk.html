@@ -615,7 +615,20 @@ function viewMatches(){
   const open=list.filter(m=>statusOf(m)==='open');
   const live=list.filter(m=>statusOf(m)==='live');
   let h=home;
-  if(open.length){h+=`<div class="sec-h">Do wytypowania</div>`+open.map(matchCard).join('');}
+  if(open.length){
+    h+=`<div class="sec-h">Do wytypowania</div>`;
+    if(open.length<=8){ h+=open.map(matchCard).join(''); }
+    else{
+      const days={}; open.forEach(m=>{const k=dayKey(m.kickoff);(days[k]=days[k]||[]).push(m);});
+      const keys=Object.keys(days).sort();
+      keys.forEach((k,i)=>{
+        const ms=days[k];
+        const isOpen=i===0?!DAY_EXP.has(k):DAY_EXP.has(k);   // najbliższy dzień domyślnie otwarty
+        h+=`<div class="sec-h toggle-h" style="font-size:13px" onclick="toggleDay('${k}')"><span>📅 ${dayLabel(ms[0].kickoff)} (${ms.length})</span><span class="chev">${isOpen?'zwiń ⌃':'rozwiń ⌄'}</span></div>`;
+        if(isOpen)h+=ms.map(matchCard).join('');
+      });
+    }
+  }
   if(live.length){h+=`<div class="sec-h">W trakcie / czeka na wynik</div>`+live.map(matchCard).join('');}
   if(h===home)h+=`<div class="card center muted">Brak meczów do typowania w tej chwili.</div>`;
   return h;
@@ -721,6 +734,10 @@ function matchCard(m){
 }
 function toggleExp(mid){ if(EXP.has(mid))EXP.delete(mid); else EXP.add(mid); render(); }
 function togglePhase(st){ if(PHASE_EXP.has(st))PHASE_EXP.delete(st); else PHASE_EXP.add(st); render(); }
+const DAY_EXP=new Set();
+function toggleDay(k){ if(DAY_EXP.has(k))DAY_EXP.delete(k); else DAY_EXP.add(k); render(); }
+function dayKey(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function dayLabel(ts){return new Date(ts).toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long'});}
 function toggleAdminExt(mid){ const e=$('ext_'+mid); if(e)e.style.display=(e.style.display==='none'?'block':'none'); }
 function advTeam(m){
   if(m.adv)return m.adv;
@@ -1022,6 +1039,11 @@ function renderAdmin(){
         <div style="font-family:Oswald;font-weight:700;font-size:14px;margin-bottom:8px">📣 Rytuał ligi</div>
         ${done.size?`<div class="row2"><select id="rimg_stage">${opts}</select><button class="icon-btn" onclick="roundImage()">🖼️ Grafika rundy</button></div>
         <div class="hint">Obrazek z wynikami etapu, trafieniami graczy i TOP 5 tabeli — gotowy na Messengera.</div>`:''}
+        ${(function(){
+          const lead=kicktippStandings()[0];
+          const popts=Object.entries(PART).sort((a,b)=>a[1].name.localeCompare(b[1].name,'pl')).map(([pid,p])=>`<option value="${pid}" ${lead&&lead.pid===pid?'selected':''}>${esc(p.name)}</option>`).join('');
+          return `<div class="row2" style="margin-top:8px"><select id="dip_pid">${popts}</select><button class="icon-btn" onclick="championDiploma()">🏅 Dyplom mistrza</button></div>
+          <div class="hint">Dyplom PNG do wydrukowania i wręczenia — domyślnie lider Kicktipp.</div>`;})()}
         <button class="icon-btn" style="width:100%;margin-top:8px" onclick="remindOnChat()">🔔 Przypomnij o typowaniu (bot na czacie)</button>
         <div class="hint">Bot wypisze mecze z najbliższych 36 godzin i kto jeszcze nie zapisał typu. Zobaczysz treść przed wysłaniem.</div>
       </div>`;})()}
@@ -1114,9 +1136,18 @@ function renderAdmin(){
     <div class="sec-h">Nowy turniej</div>
     <div class="card">
       <div class="hint" style="margin-bottom:10px">Turniej się skończył? Zarchiwizuj go, żeby zapisać wyniki w historii, i zacznij kolejny na czystej planszy — bez zakładania nowej apki i bez utraty listy graczy.</div>
-      <label>Nazwa archiwizowanego turnieju</label>
+      <label>Nazwa archiwizowanego turnieju (do historii)</label>
       <input id="arc_name" value="${esc(CFG.leagueName||'')}">
-      <button class="danger" style="width:100%;margin-top:10px" onclick="archiveTournament()">🏁 Zakończ i zarchiwizuj turniej</button>
+      <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">
+        <b style="font-size:13px">Ustawienia nowej edycji (od razu po archiwizacji):</b>
+        <label style="margin-top:8px">Nazwa nowego turnieju (podtytuł w nagłówku)</label>
+        <input id="ne_sub" placeholder="np. TYPER EURO 2028">
+        <label style="margin-top:8px">Punkty za trafionego mistrza</label>
+        <input id="ne_pts" type="number" min="1" value="${champPtsVal()}">
+        <label style="margin-top:8px">Termin typowania mistrza (puste = pierwszy gwizdek)</label>
+        <input id="ne_dl" type="datetime-local">
+      </div>
+      <button class="danger" style="width:100%;margin-top:10px" onclick="archiveTournament()">🏁 Zakończ turniej i rozpocznij nową edycję</button>
       ${Object.keys(ARCHIVE).length?`<div class="hint" style="margin-top:8px">Zarchiwizowanych turniejów: ${Object.keys(ARCHIVE).length}. Zobacz je w zakładce Tabela → Historia turniejów.</div>`:''}
     </div>
     <div class="foot">Panel widoczny tylko dla Ciebie. Uczestnicy logują się swoim hasłem.</div>
@@ -1210,7 +1241,17 @@ function archiveTournament(){
     .then(()=>db.ref('champ').remove())
     .then(()=>db.ref('config/champion').remove())
     .then(()=>db.ref('config/champDeadline').remove())
-    .then(()=>{flash('Turniej zarchiwizowany 🏁');$('arc_name').value='';})
+    .then(()=>{
+      const cfg={};
+      const sub=($('ne_sub')&&$('ne_sub').value.trim())||'';
+      const pts=Number(($('ne_pts')&&$('ne_pts').value)||0);
+      const dl=($('ne_dl')&&$('ne_dl').value)||'';
+      if(sub)cfg['config/subtitle']=sub;
+      if(pts>0)cfg['config/champPts']=pts;
+      if(dl){const t=new Date(dl).getTime();if(!isNaN(t))cfg['config/champDeadline']=t;}
+      return Object.keys(cfg).length?db.ref().update(cfg):null;
+    })
+    .then(()=>{flash('Nowa edycja gotowa 🏁');if($('arc_name'))$('arc_name').value='';})
     .catch(e=>alert(dbErrMsg(e)));
 }
 function dbErrMsg(e){
@@ -1506,6 +1547,64 @@ function remindOnChat(){
   if(!confirm('Bot wyśle na czat:\n\n'+txt))return;
   db.ref('chat').push({pid:'__bot__',name:'⚽ Liga Bot',text:txt.slice(0,900),ts:Date.now()})
     .then(()=>flash('Przypomnienie wysłane 🔔')).catch(e=>alert(dbErrMsg(e)));
+}
+/* ---------- v7: dyplom mistrza edycji ---------- */
+function championDiploma(){
+  const pid=($('dip_pid')&&$('dip_pid').value)||'';
+  if(!pid||!PART[pid]){alert('Wybierz gracza.');return;}
+  const p=PART[pid];
+  const sk=kicktippStandings(); const sc=standings();
+  const rk=sk.find(r=>r.pid===pid)||{}; const rc=sc.find(r=>r.pid===pid)||{};
+  const bcount=earnedBadges(pid).length;
+  const W=1080,H=1400;
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,SHARE_BG1);g.addColorStop(1,SHARE_BG2);
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  // podwójna złota rama
+  x.strokeStyle=SHARE_AC;x.lineWidth=10;x.strokeRect(36,36,W-72,H-72);
+  x.lineWidth=2;x.strokeRect(58,58,W-116,H-116);
+  // narożne ornamenty
+  x.font='44px Arial';x.textAlign='center';x.fillStyle=SHARE_AC;
+  [[92,110],[W-92,110],[92,H-76],[W-92,H-76]].forEach(([px,py])=>x.fillText('⚜️',px,py));
+  x.fillStyle='rgba(255,255,255,.75)';x.font='700 34px Oswald, Arial';
+  x.fillText((CFG.leagueName||'LIGA TYPERA').toUpperCase(),W/2,150);
+  x.fillStyle=SHARE_AC;x.font='700 96px Oswald, Arial';
+  x.fillText('DYPLOM',W/2,280);
+  x.font='96px Arial';x.fillText('🏆',W/2,420);
+  x.fillStyle='rgba(255,255,255,.65)';x.font='500 30px Inter, Arial';
+  x.fillText('za zwycięstwo w lidze typerów',W/2,500);
+  x.fillStyle='rgba(255,255,255,.65)';x.font='600 32px Oswald, Arial';
+  x.fillText((CFG.subtitle||'').toUpperCase(),W/2,548);
+  // nazwisko — dopasuj rozmiar
+  let fs=110;x.font='700 '+fs+'px Oswald, Arial';
+  while(x.measureText(p.name).width>W-220&&fs>50){fs-=6;x.font='700 '+fs+'px Oswald, Arial';}
+  x.fillStyle='#FFFFFF';x.fillText(p.name,W/2,700);
+  x.strokeStyle=SHARE_AC;x.lineWidth=4;x.beginPath();x.moveTo(W/2-200,740);x.lineTo(W/2+200,740);x.stroke();
+  x.fillStyle=SHARE_AC;x.font='700 40px Oswald, Arial';
+  x.fillText('MISTRZ EDYCJI',W/2,810);
+  // osiągnięcia
+  x.fillStyle='rgba(255,255,255,.85)';x.font='500 32px Inter, Arial';
+  const lines=[
+    (rk.total!=null?rk.total+' pkt w klasyfikacji Kicktipp':null),
+    (rc.total!=null?rc.total+' pkt w klasyfikacji klasycznej':null),
+    (rc.correct!=null?rc.correct+' dokładnie trafionych wyników':null),
+    (bcount?bcount+' zdobytych odznak':null)
+  ].filter(Boolean);
+  let y=910; lines.forEach(l=>{x.fillText(l,W/2,y);y+=56;});
+  x.fillStyle='rgba(255,255,255,.45)';x.font='500 26px Inter, Arial';
+  x.fillText(new Date().toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'}),W/2,H-150);
+  x.fillText('⚽ Liga Typera',W/2,H-108);
+  c.toBlob(async blob=>{
+    if(!blob){alert('Nie udało się wygenerować dyplomu.');return;}
+    const file=new File([blob],'dyplom-mistrza.png',{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:'Dyplom mistrza'});return;}catch(e){if(e&&e.name==='AbortError')return;}
+    }
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='dyplom-mistrza.png';
+    document.body.appendChild(a);a.click();a.remove();
+    flash('Dyplom pobrany 🏅');
+  },'image/png');
 }
 /* ---------- v6: grafika rundy do Messengera ---------- */
 function roundImage(){
@@ -1806,6 +1905,7 @@ function showProfile(pid){
     <div style="margin-top:14px"><b style="font-size:13px">Forma (ostatnie 5):</b><div class="forma">${forma}</div></div>
     <div style="margin-top:14px;font-size:14px">${upsetHtml}</div>
     ${(function(){const w=roundWinsMap()[pid];return w?`<div style="margin-top:10px;font-size:14px">🎖️ <b>Mistrz rundy:</b> ${w.map(esc).join(', ')}</div>`:'';})()}
+    ${careerHtml(pid)}
     <div style="margin-top:14px"><b style="font-size:13px">Odznaki:</b>${(function(){const bb=earnedBadges(pid);return bb.length?bb.map(x=>`<div class="prow"><span class="nm">${x.e} ${esc(x.n)}</span><span class="muted" style="font-size:12px">${esc(x.d)}</span></div>`).join(''):'<div class="muted" style="font-size:13px">Brak odznak — jeszcze przed Tobą!</div>';})()}</div>
     ${(function(){
       const earned=new Set(earnedBadges(pid).map(b=>b.n));
@@ -2034,6 +2134,24 @@ const BADGE_CATALOG=[
  {e:'🌙',n:'Nocna zmiana',how:'Zapisz typ między północą a 5 rano.'},
  {e:'🏅',n:'Finalista',how:'Obstaw mecz finałowy.'}
 ];
+function careerHtml(pid){
+  const arcs=Object.values(ARCHIVE||{});
+  if(!arcs.length)return '';
+  let ed=0,kick=0,ex=0;const titles=[];const badgeSet=new Set(earnedBadges(pid).map(b=>b.n));
+  arcs.forEach(a=>{
+    const sk=(a.standingsKicktipp||[]).find(r=>r.pid===pid);
+    const sc=(a.standingsClassic||[]).find(r=>r.pid===pid);
+    if(!sk&&!sc)return;
+    ed++;
+    if(sk){kick+=Number(sk.total||0);
+      if(a.standingsKicktipp[0]&&a.standingsKicktipp[0].pid===pid)titles.push(a.name);}
+    if(sc)ex+=Number(sc.correct||0);
+    (((a.badges||{})[pid])||[]).forEach(b=>badgeSet.add(b&&b.n?b.n:b));
+  });
+  if(!ed)return '';
+  const edw=ed===1?'edycja':((ed>=2&&ed<=4)?'edycje':'edycji');
+  return `<div style="margin-top:10px;font-size:13.5px">🏛️ <b>Kariera:</b> ${ed} ${edw} w historii · ${kick} pkt Kicktipp łącznie · ${ex} dokładnych · kolekcja odznak: ${badgeSet.size}${titles.length?`<br>👑 <b>Mistrz edycji:</b> ${titles.map(esc).join(', ')}`:''}</div>`;
+}
 function showBadgeCatalog(pid){
   pid=pid||ME;
   const p=PART[pid]; if(!p)return;
