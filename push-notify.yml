@@ -1,0 +1,29 @@
+name: Push notifications (Liga Typera)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # co 5 minut
+  workflow_dispatch: {}       # pozwala odpalić ręcznie z zakładki Actions
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Zainstaluj zależności
+        run: npm install google-auth-library --no-save
+      - name: Wyślij powiadomienia
+        env:
+          REMIND_MINUTES: '60'
+          FIREBASE_DB_URL_P258: ${{ secrets.FIREBASE_DB_URL_P258 }}
+          FIREBASE_SERVICE_ACCOUNT_P258: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_P258 }}
+          ONESIGNAL_APP_ID_P258: ${{ secrets.ONESIGNAL_APP_ID_P258 }}
+          ONESIGNAL_REST_KEY_P258: ${{ secrets.ONESIGNAL_REST_KEY_P258 }}
+          FIREBASE_DB_URL_JYSK: ${{ secrets.FIREBASE_DB_URL_JYSK }}
+          FIREBASE_SERVICE_ACCOUNT_JYSK: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JYSK }}
+          ONESIGNAL_APP_ID_JYSK: ${{ secrets.ONESIGNAL_APP_ID_JYSK }}
+          ONESIGNAL_REST_KEY_JYSK: ${{ secrets.ONESIGNAL_REST_KEY_JYSK }}
+        run: node scripts/send-notify.mjs
