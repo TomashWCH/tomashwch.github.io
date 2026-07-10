@@ -591,6 +591,32 @@ function askAdmin(){
   else alert('Niepoprawne hasło administratora.');
 }
 function logout(){ME=null;localStorage.removeItem('typer_jysk_pid');render();}
+function updatePushDiag(){
+  const el=$('pushdiag'); if(!el)return;
+  if(typeof ONESIGNAL_APP_ID==='undefined'||ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){el.innerHTML='🔕 OneSignal nieskonfigurowany w tym pliku.';return;}
+  const swInfo=(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations)?navigator.serviceWorker.getRegistrations():Promise.resolve([]);
+  swInfo.then(regs=>{
+    const scopes=regs.map(r=>r.scope.replace(location.origin,''))||[];
+    const run=(OneSignal)=>{
+      try{
+        const perm=OneSignal.Notifications&&OneSignal.Notifications.permission;
+        const sub=OneSignal.User&&OneSignal.User.PushSubscription;
+        const optedIn=!!(sub&&sub.optedIn);
+        const id=(sub&&sub.id)||null;
+        el.innerHTML=`<b>🔔 Diagnostyka powiadomień (to urządzenie):</b><br>
+          1. Zgoda przeglądarki: ${perm?'✅ jest':'❌ BRAK'}<br>
+          2. Subskrypcja TEJ ligi: ${optedIn?'✅ aktywna':'❌ NIEAKTYWNA'}<br>
+          3. ID subskrypcji: ${id?`<code style="font-size:10px">${id}</code>`:'—'}<br>
+          4. Service workery: <code style="font-size:10px">${scopes.join(' · ')||'brak'}</code><br>
+          5. App ID ligi: <code style="font-size:10px">${ONESIGNAL_APP_ID}</code>
+          ${!optedIn?`<br><button class="icon-btn mini" style="margin-top:6px" onclick="askPush();setTimeout(updatePushDiag,2500)">Włącz teraz i odśwież status</button>`:''}
+          <br><button class="icon-btn mini" style="margin-top:6px" onclick="updatePushDiag()">↻ Odśwież status</button>`;
+      }catch(e){el.textContent='Błąd odczytu OneSignal: '+((e&&e.message)||e);}
+    };
+    if(window.OneSignalDeferred){OneSignalDeferred.push(run);}
+    else el.innerHTML='❌ SDK OneSignal nie załadował się (blokada skryptów / adblock?).<br>Service workery: '+((scopes.join(' · '))||'brak');
+  });
+}
 async function askPush(){
   if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){flash('Powiadomienia jeszcze nie skonfigurowane przez admina.');return;}
   if(!window.OneSignalDeferred){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
@@ -964,6 +990,7 @@ function viewKicktipp(){
 
 /* ---------- Admin ---------- */
 function renderAdmin(){
+  setTimeout(updatePushDiag,200);
   $('tabs').innerHTML='';
   const ex=`<button class="icon-btn" onclick="exitAdmin()">Wyjdź z panelu</button>`;
   const plist=Object.entries(PART).map(([pid,p])=>`
@@ -1052,6 +1079,7 @@ function renderAdmin(){
       </div>
     </div>`:''}
 
+    <div class="card" id="pushdiag" style="font-size:13px;line-height:1.6">🔔 Sprawdzam stan powiadomień…</div>
     ${(function(){
       const age=backupAgeDays();
       const warn=age===null||age>=7;
