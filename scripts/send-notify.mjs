@@ -50,29 +50,37 @@ async function getAccessToken(serviceAccountJson) {
   return token;
 }
 
+// Nowe apki OneSignal (2024+) nie mają segmentu "Subscribed Users" — domyślny nazywa się "Total Subscriptions".
+// Wysyłka do nieistniejącego segmentu zwraca mylące "All included players are not subscribed",
+// dlatego próbujemy obu nazw po kolei.
+const SEGMENT_CANDIDATES = [['Total Subscriptions'], ['Subscribed Users']];
 async function sendPush(appId, restKey, title, message) {
   const auth = restKey.startsWith('os_v2') ? `Key ${restKey}` : `Basic ${restKey}`;
-  const res = await fetch('https://onesignal.com/api/v1/notifications', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Authorization': auth,
-    },
-    body: JSON.stringify({
-      app_id: appId,
-      target_channel: 'push',
-      included_segments: ['Subscribed Users'],
-      headings: { pl: title, en: title },
-      contents: { pl: message, en: message },
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.errors) {
-    noteErr('OneSignal send failed: ' + res.status + ' ' + JSON.stringify(data).slice(0, 200));
-    return false;
+  let lastErr = '';
+  for (const segments of SEGMENT_CANDIDATES) {
+    const res = await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': auth,
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        target_channel: 'push',
+        included_segments: segments,
+        headings: { pl: title, en: title },
+        contents: { pl: message, en: message },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && !data.errors && data.id) {
+      note(`Push sent ✅ (segment: ${segments[0]}) ${title} | id: ${String(data.id).slice(0, 12)}…`);
+      return true;
+    }
+    lastErr = res.status + ' ' + JSON.stringify(data).slice(0, 180);
   }
-  note('Push sent ✅ ' + title + ' | id: ' + String(data.id).slice(0, 12) + '…');
-  return true;
+  noteErr('OneSignal send failed (próbowałem obu nazw segmentów): ' + lastErr);
+  return false;
 }
 
 async function fbGet(dbUrl, path, token) {
