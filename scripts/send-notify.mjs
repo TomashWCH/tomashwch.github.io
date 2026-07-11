@@ -68,10 +68,10 @@ async function sendPush(appId, restKey, title, message) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.errors) {
-    console.error('OneSignal send failed:', res.status, JSON.stringify(data));
+    noteErr('OneSignal send failed: ' + res.status + ' ' + JSON.stringify(data).slice(0, 200));
     return false;
   }
-  console.log('Push sent:', title, '-', message, '| id:', data.id);
+  note('Push sent ✅ ' + title + ' | id: ' + String(data.id).slice(0, 12) + '…');
   return true;
 }
 
@@ -98,6 +98,10 @@ async function fbDelete(dbUrl, path, token) {
   if (!res.ok) throw new Error(`Firebase DELETE ${path} failed: ${res.status}`);
 }
 
+const REPORT = [];
+function note(s){ REPORT.push(s); console.log(s); }
+function noteErr(s){ REPORT.push('❗ '+s); console.error(s); }
+
 async function preflightOneSignal(app) {
   // Diagnostyka: do KTÓREJ apki OneSignal celują sekrety i ilu ma subskrybentów.
   try {
@@ -105,12 +109,12 @@ async function preflightOneSignal(app) {
     const res = await fetch(`https://onesignal.com/api/v1/players?app_id=${app.oneSignalAppId}&limit=1`, { headers: { Authorization: auth } });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) {
-      console.error(`[${app.label}] PREFLIGHT: OneSignal odrzucił parę AppID+klucz (HTTP ${res.status}) — App ID i REST key nie pasują do siebie lub klucz nieważny.`, JSON.stringify(d).slice(0, 200));
+      noteErr(`PREFLIGHT: OneSignal odrzucił parę AppID+klucz (HTTP ${res.status}) — REST key nie pasuje do tej apki albo jest nieważny. ${JSON.stringify(d).slice(0, 150)}`);
       return false;
     }
-    console.log(`[${app.label}] PREFLIGHT: sekret ONESIGNAL_APP_ID zaczyna się od "${String(app.oneSignalAppId).slice(0, 8)}" | subskrypcji w tej apce: ${d.total_count}`);
+    note(`PREFLIGHT: apka ${String(app.oneSignalAppId).slice(0, 8)}… | subskrypcji: ${d.total_count}`);
     if (!d.total_count) {
-      console.error(`[${app.label}] PREFLIGHT: ta apka OneSignal ma ZERO subskrybentów — sekrety celują w inną apkę niż plik HTML (porównaj początek App ID z piątą linią diagnostyki w aplikacji).`);
+      noteErr(`Ta apka OneSignal ma ZERO subskrybentów widocznych dla API — kliknij dzwoneczek 🔔 w apce na telefonie i sprawdź Audience w OneSignal.`);
     }
     return true;
   } catch (e) {
@@ -150,8 +154,8 @@ async function processApp(app) {
           const message = `Sprawdź swój typ i tabelę w Lidze Typera ${app.label}!`;
           ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
         }
-        if (ok) await fbDelete(app.dbUrl, `notify/pending/${key}`, token);
-        else console.error(`[${app.label}] zlecenie ${key} zostaje w kolejce — ponowię przy następnym przebiegu.`);
+        if (ok) { await fbDelete(app.dbUrl, `notify/pending/${key}`, token); note(`Wysłano push (${item.type}) i usunięto zlecenie ${key}.`); }
+        else noteErr(`Zlecenie ${key} (${item.type}) NIE wysłane — zostaje w kolejce do ponowienia.`);
       }
     }
   } catch (e) {
@@ -170,13 +174,22 @@ async function processApp(app) {
           const title = `⏰ Zbliża się mecz!`;
           const message = `${teamName(m.home)} – ${teamName(m.away)} już za ${Math.round(msLeft / 60000)} min. Zdąż wytypować wynik!`;
           const ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
-          if (ok) await fbPatch(app.dbUrl, `matches/${mid}`, token, { remindSent: true });
-          else console.error(`[${app.label}] przypomnienie o ${m.home}-${m.away} NIE wysłane — spróbuję przy następnym przebiegu.`);
+          if (ok) { await fbPatch(app.dbUrl, `matches/${mid}`, token, { remindSent: true }); note(`Wysłano przypomnienie: ${m.home}-${m.away}.`); }
+          else noteErr(`Przypomnienie o ${m.home}-${m.away} NIE wysłane — ponowię.`);
         }
       }
     }
   } catch (e) {
-    console.error(`[${app.label}] błąd przy przypomnieniach:`, e.message);
+    noteErr(`Błąd przy przypomnieniach: ` + e.message);
+  }
+
+  // 3) Raport z przebiegu do bazy — apka pokaże go w karcie diagnostycznej
+  try {
+    const text = REPORT.length ? REPORT.join('\n') : 'Przebieg OK — nic do wysłania (brak zleceń i meczów w oknie przypomnień).';
+    await fbPatch(app.dbUrl, 'notify/lastRun', token, { ts: Date.now(), report: text.slice(0, 4000) });
+    REPORT.length = 0;
+  } catch (e) {
+    console.error(`[${app.label}] nie zapisałem raportu:`, e.message);
   }
 }
 
