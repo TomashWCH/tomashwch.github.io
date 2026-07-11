@@ -1,0 +1,17 @@
+{
+  "name": "LIGA TYPERA P258",
+  "short_name": "Typer P258",
+  "description": "Liga typera piłkarskiego P258",
+  "start_url": "/Liga/typera.html",
+  "scope": "/Liga/",
+  "display": "standalone",
+  "background_color": "#0F1511",
+  "theme_color": "#0F1511",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/Liga/icon-typera-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/Liga/icon-typera-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/Liga/icon-typera-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/Liga/icon-typera-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "LIGA TYPERA JYSK",
+  "short_name": "Typer JYSK",
+  "description": "Liga typera piłkarskiego JYSK",
+  "start_url": "/Liga/jysk.html",
+  "scope": "/Liga/",
+  "display": "standalone",
+  "background_color": "#062D63",
+  "theme_color": "#062D63",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/Liga/icon-jysk-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/Liga/icon-jysk-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/Liga/icon-jysk-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/Liga/icon-jysk-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
