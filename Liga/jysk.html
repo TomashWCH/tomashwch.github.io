@@ -610,7 +610,7 @@ function updatePushDiag(){
         const optedIn=!!(sub&&sub.optedIn);
         const id=(sub&&sub.id)||null;
         el.innerHTML=`<b>🔔 Diagnostyka powiadomień (to urządzenie):</b><br>
-          1. Zgoda przeglądarki: ${perm?'✅ jest':'❌ BRAK'}<br>
+          1. Zgoda przeglądarki: ${perm?'✅ jest':((typeof Notification!=='undefined'&&Notification.permission==='denied')?'⛔ ZABLOKOWANA w ustawieniach strony (kłódka obok adresu → Powiadomienia → Zezwól)':'❌ brak — kliknij dzwonek i zezwól')}<br>
           2. Subskrypcja TEJ ligi: ${optedIn?'✅ aktywna':'❌ NIEAKTYWNA'}<br>
           3. ID subskrypcji: ${id?`<code style="font-size:10px">${id}</code>`:'—'}<br>
           4. Service workery: <code style="font-size:10px">${scopes.join(' · ')||'brak'}</code><br>
@@ -638,7 +638,12 @@ async function askPush(){
   OneSignalDeferred.push(async function(OneSignal){
     try{
       await OneSignal.Notifications.requestPermission();      // nic nie robi, jeśli zgoda już jest
-      if(!OneSignal.Notifications.permission){flash('Bez zgody przeglądarki nie dam rady 😕');return;}
+      if(!OneSignal.Notifications.permission){
+        const st=(typeof Notification!=='undefined')?Notification.permission:'?';
+        if(st==='denied')alert('Przeglądarka BLOKUJE powiadomienia dla tej strony.\n\nOdblokuj: stuknij ikonę obok adresu (kłódka/suwaki) → Uprawnienia → Powiadomienia → Zezwól — i kliknij dzwonek ponownie.');
+        else flash('Nie wyraziłeś zgody w okienku przeglądarki — kliknij dzwonek i wybierz „Zezwól".');
+        return;
+      }
       await OneSignal.User.PushSubscription.optIn();          // właściwy zapis do TEJ apki (zgoda to za mało)
       try{ await OneSignal.login(String(ME)); }catch(e){}
       flash('Powiadomienia włączone dla tej ligi 🔔');
