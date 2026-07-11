@@ -1186,6 +1186,12 @@ function renderAdmin(){
       <div class="row2"><input id="lname" value="${esc(CFG.leagueName||'LIGA TYPERA JYSK')}"><button class="icon-btn" onclick="saveName()">Zapisz</button></div>
       <label style="margin-top:14px">Podtytuł (nazwa turnieju w nagłówku)</label>
       <div class="row2"><input id="lsub" value="${esc(CFG.subtitle||'TYPER MUNDIAL 2026')}"><button class="icon-btn" onclick="saveSub()">Zapisz</button></div>
+      <label style="margin-top:14px">🤖 Automatyczne wpisywanie wyników</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;text-transform:none;letter-spacing:0;cursor:pointer">
+        <input type="checkbox" style="width:auto" ${CFG.autoResults?'checked':''} onchange="db.ref('config/autoResults').set(this.checked||null).then(()=>flash(this.checked?'Auto-wyniki włączone 🤖':'Auto-wyniki wyłączone')).catch(e=>alert(dbErrMsg(e)))">
+        Robot co 5 minut sam wpisuje zakończone mecze (źródło: openfootball) i wysyła powiadomienia
+      </label>
+      <div class="hint">Wynik po 90 min, dogrywki i karne rozpoznawane automatycznie. Robot nigdy nie nadpisuje wyników już wpisanych — Twoje ręczne korekty są bezpieczne. Przycisk „🌐 Pobierz wyniki" zostaje jako opcja ręczna.</div>
       <label style="margin-top:14px">📜 Ustalenia ligi (dopisek do regulaminu w Tabeli)</label>
       <div class="row2"><input id="lrules" value="${esc(CFG.rulesNote||'')}" placeholder="np. przegrany turnieju stawia pączki"><button class="icon-btn" onclick="saveRulesNote()">Zapisz</button></div>
       <label style="margin-top:14px">🏆 Typowanie mistrza turnieju</label>
