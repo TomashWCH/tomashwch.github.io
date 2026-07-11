@@ -83,6 +83,30 @@ async function sendPush(appId, restKey, title, message) {
   return false;
 }
 
+async function sendPushToPlayers(appId, restKey, title, message, pids) {
+  if (!pids || !pids.length) return true;
+  const auth = restKey.startsWith('os_v2') ? `Key ${restKey}` : `Basic ${restKey}`;
+  const res = await fetch('https://onesignal.com/api/v1/notifications', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Authorization': auth },
+    body: JSON.stringify({
+      app_id: appId,
+      target_channel: 'push',
+      include_aliases: { external_id: pids.map(String) },
+      headings: { pl: title, en: title },
+      contents: { pl: message, en: message },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && !data.errors && data.id) {
+    note(`Push celowany ✅ (${pids.length} odb.) ${title} | id: ${String(data.id).slice(0, 12)}…`);
+    return true;
+  }
+  // "not subscribed" przy celowanych = adresaci nie mają jeszcze dzwoneczka/loginu — nie blokujemy kolejki
+  note(`Push celowany: brak aktywnych odbiorców wśród wskazanych (${pids.length}) — pomijam. ${JSON.stringify(data).slice(0,120)}`);
+  return true;
+}
+
 async function fbGet(dbUrl, path, token) {
   const url = `${dbUrl}/${path}.json`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -155,12 +179,28 @@ async function processApp(app) {
         let ok = true;
         if (item.type === 'test') {
           ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey,
-            '🧪 Test powiadomień', `Działa! Liga Typera ${app.label} może wysyłać pushe. 🎉`);
+            '🧪 Test powiadomień', 'Działa! Liga Typera może wysyłać pushe. 🎉');
         }
         else if (item.type === 'result') {
-          const title = `⚽ Wynik: ${teamName(item.home)} ${item.hs}:${item.as} ${teamName(item.away)}`;
-          const message = `Sprawdź swój typ i tabelę w Lidze Typera ${app.label}!`;
+          const title = `⚽ ${teamName(item.home)} ${item.hs} : ${item.as} ${teamName(item.away)}`;
+          const message = 'Koniec meczu — sprawdź swój typ i tabelę w Lidze Typera!';
           ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
+          // 🎯 gratulacje tylko dla tych, którzy trafili dokładny wynik
+          if (ok && item.mid != null) {
+            try {
+              const preds = await fbGet(app.dbUrl, `predictions/${item.mid}`, token);
+              if (preds) {
+                const exact = Object.entries(preds).filter(([pid, pr]) =>
+                  pr && Number(pr.h) === Number(item.hs) && Number(pr.a) === Number(item.as));
+                const zwykli = exact.filter(([, pr]) => !pr.j).map(([pid]) => pid);
+                const jokerzy = exact.filter(([, pr]) => pr.j).map(([pid]) => pid);
+                if (zwykli.length) await sendPushToPlayers(app.oneSignalAppId, app.oneSignalRestKey,
+                  '🎯 Dokładne trafienie!', `Wytypowałeś ${item.hs}:${item.as} w meczu ${teamName(item.home)} – ${teamName(item.away)}. Brawo!`, zwykli);
+                if (jokerzy.length) await sendPushToPlayers(app.oneSignalAppId, app.oneSignalRestKey,
+                  '🎯⭐ Dokładne trafienie z JOKEREM!', `Wytypowałeś ${item.hs}:${item.as} w meczu ${teamName(item.home)} – ${teamName(item.away)} — punkty ×2. Mistrzostwo!`, jokerzy);
+              }
+            } catch (e) { noteErr('Gratulacje za trafienia nie wyszły: ' + e.message); }
+          }
         }
         if (ok) { await fbDelete(app.dbUrl, `notify/pending/${key}`, token); note(`Wysłano push (${item.type}) i usunięto zlecenie ${key}.`); }
         else noteErr(`Zlecenie ${key} (${item.type}) NIE wysłane — zostaje w kolejce do ponowienia.`);
@@ -170,19 +210,29 @@ async function processApp(app) {
     console.error(`[${app.label}] błąd przy notify/pending:`, e.message);
   }
 
-  // 2) Przypomnienia przed zbliżającymi się meczami
+  // 2) Przypomnienia przed zbliżającymi się meczami — tylko do graczy BEZ typu
   try {
     const matches = await fbGet(app.dbUrl, 'matches', token);
     if (matches) {
       const now = Date.now();
+      let participants = null;
       for (const [mid, m] of Object.entries(matches)) {
         if (!m || m.done || m.remindSent || !m.kickoff) continue;
         const msLeft = m.kickoff - now;
         if (msLeft > 0 && msLeft <= REMIND_MINUTES * 60000) {
-          const title = `⏰ Zbliża się mecz!`;
-          const message = `${teamName(m.home)} – ${teamName(m.away)} już za ${Math.round(msLeft / 60000)} min. Zdąż wytypować wynik!`;
-          const ok = await sendPush(app.oneSignalAppId, app.oneSignalRestKey, title, message);
-          if (ok) { await fbPatch(app.dbUrl, `matches/${mid}`, token, { remindSent: true }); note(`Wysłano przypomnienie: ${m.home}-${m.away}.`); }
+          if (!participants) participants = (await fbGet(app.dbUrl, 'participants', token)) || {};
+          const preds = (await fbGet(app.dbUrl, `predictions/${mid}`, token)) || {};
+          const missing = Object.keys(participants).filter(pid => !preds[pid]);
+          const mins = Math.round(msLeft / 60000);
+          let ok = true;
+          if (missing.length) {
+            ok = await sendPushToPlayers(app.oneSignalAppId, app.oneSignalRestKey,
+              '⏰ Nie masz typu!', `${teamName(m.home)} – ${teamName(m.away)} zaczyna się za ${mins} min. Zdąż obstawić!`, missing);
+            if (ok) note(`Przypomnienie ${m.home}-${m.away}: wysłane do ${missing.length} graczy bez typu.`);
+          } else {
+            note(`Przypomnienie ${m.home}-${m.away}: wszyscy mają typy — nikogo nie budzę. 👏`);
+          }
+          if (ok) await fbPatch(app.dbUrl, `matches/${mid}`, token, { remindSent: true });
           else noteErr(`Przypomnienie o ${m.home}-${m.away} NIE wysłane — ponowię.`);
         }
       }
