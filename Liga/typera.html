@@ -616,7 +616,15 @@ function updatePushDiag(){
           5. App ID ligi: <code style="font-size:10px">${ONESIGNAL_APP_ID}</code>
           ${!optedIn?`<br><button class="icon-btn mini" style="margin-top:6px" onclick="askPush();setTimeout(updatePushDiag,2500)">Włącz teraz i odśwież status</button>`:''}
           <br><button class="icon-btn mini" style="margin-top:6px" onclick="queueTestPush()">🧪 Wyślij testowy push przez automat</button>
-          <br><button class="icon-btn mini" style="margin-top:6px" onclick="updatePushDiag()">↻ Odśwież status</button>`;
+          <br><button class="icon-btn mini" style="margin-top:6px" onclick="updatePushDiag()">↻ Odśwież status</button>
+          <div id="botrun" style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;font-size:12px;color:var(--muted)">⏳ pobieram raport automatu…</div>`;
+        db.ref('notify/lastRun').once('value').then(s=>{
+          const el2=$('botrun'); if(!el2)return;
+          const v=s.val();
+          if(!v){el2.innerHTML='🤖 Automat jeszcze nie zostawił raportu w tej lidze (żaden przebieg nie doszedł do zapisu — sprawdź, czy nowy skrypt jest w repo).';return;}
+          const ago=Math.round((Date.now()-v.ts)/60000);
+          el2.innerHTML=`<b>🤖 Ostatni przebieg automatu:</b> ${ago<1?'przed chwilą':ago+' min temu'}<br><span style="white-space:pre-line">${esc(v.report||'')}</span>`;
+        }).catch(()=>{const el2=$('botrun');if(el2)el2.textContent='Nie udało się pobrać raportu automatu.';});
       }catch(e){el.textContent='Błąd odczytu OneSignal: '+((e&&e.message)||e);}
     };
     if(window.OneSignalDeferred){OneSignalDeferred.push(run);}
