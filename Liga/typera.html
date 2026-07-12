@@ -335,7 +335,7 @@ const ONESIGNAL_APP_ID='6f33addf-12e1-48a0-81f9-8afd37127133';
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')!==0){
   OneSignalDeferred.push(async function(OneSignal){
-    await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/'} });
+    await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'p258/OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/p258/'} });
     try{
       if(typeof ME!=='undefined' && ME){
         try{ await OneSignal.login(String(ME)); }
