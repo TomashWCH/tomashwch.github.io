@@ -336,7 +336,7 @@ window.OneSignalDeferred = window.OneSignalDeferred || [];
 if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')!==0){
   OneSignalDeferred.push(async function(OneSignal){
     try{
-      await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'Jysk/OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/Jysk/'} });
+      await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'Liga/Jysk/OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/Jysk/'} });
     }catch(initErr){
       console.error('OneSignal.init nieudany:', initErr);
       setTimeout(()=>{ if(typeof flash==='function') flash('❌ OneSignal.init błąd: '+((initErr&&initErr.message)||initErr)); }, 800);
