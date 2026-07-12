@@ -595,8 +595,9 @@ function queueTestPush(){
     .then(()=>flash('Zlecenie w kolejce 🧪 — push przyjdzie po najbliższym przebiegu automatu (do ~5 min; możesz też odpalić Run workflow).'))
     .catch(e=>alert(dbErrMsg(e)));
 }
-function updatePushDiag(){
-  const el=$('pushdiag'); if(!el)return;
+function updatePushDiag(elId,simple){
+  elId=elId||'pushdiag';
+  const el=$(elId); if(!el)return;
   if(typeof ONESIGNAL_APP_ID==='undefined'||ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){el.innerHTML='🔕 OneSignal nieskonfigurowany w tym pliku.';return;}
   const swInfo=(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations)?navigator.serviceWorker.getRegistrations():Promise.resolve([]);
   swInfo.then(regs=>{
@@ -608,13 +609,23 @@ function updatePushDiag(){
         const optedIn=!!(sub&&sub.optedIn);
         const id=(sub&&sub.id)||null;
         const linkOk=(function(){try{return localStorage.getItem('typer_link_ok');}catch(e){return null;}})();
+        const linkLine=`Powiązanie z kontem (${typeof ME!=='undefined'&&ME?`<code style="font-size:10px">${esc(String(ME))}</code>`:'brak loginu'}): ${linkOk==='1'?'✅ potwierdzone':(linkOk==='0'?'⛔ NIEUDANE — pushe „trafiłeś wynik" Cię ominą':'❔ nieznane (kliknij niżej)')}`;
+        if(simple){
+          el.innerHTML=`<b>🔔 Powiadomienia (to urządzenie):</b><br>
+            Zgoda przeglądarki: ${perm?'✅ jest':((typeof Notification!=='undefined'&&Notification.permission==='denied')?'⛔ zablokowana (kłódka przy adresie → Powiadomienia → Zezwól)':'❌ brak — kliknij dzwonek')}<br>
+            Subskrypcja: ${optedIn?'✅ aktywna':'❌ nieaktywna'}<br>
+            ${linkLine}
+            <br><button class="icon-btn mini" style="margin-top:6px" onclick="relinkAccount()">🔗 Wymuś powiązanie konta</button>
+            <br><button class="icon-btn mini" style="margin-top:6px" onclick="updatePushDiag('${elId}',true)">↻ Odśwież status</button>`;
+          return;
+        }
         el.innerHTML=`<b>🔔 Diagnostyka powiadomień (to urządzenie):</b><br>
           1. Zgoda przeglądarki: ${perm?'✅ jest':((typeof Notification!=='undefined'&&Notification.permission==='denied')?'⛔ ZABLOKOWANA w ustawieniach strony (kłódka obok adresu → Powiadomienia → Zezwól)':'❌ brak — kliknij dzwonek i zezwól')}<br>
           2. Subskrypcja TEJ ligi: ${optedIn?'✅ aktywna':'❌ NIEAKTYWNA'}<br>
           3. ID subskrypcji: ${id?`<code style="font-size:10px">${id}</code>`:'—'}<br>
           4. Service workery: <code style="font-size:10px">${scopes.join(' · ')||'brak'}</code><br>
           5. App ID ligi: <code style="font-size:10px">${ONESIGNAL_APP_ID}</code><br>
-          6. Powiązanie z kontem (${typeof ME!=='undefined'&&ME?`<code style="font-size:10px">${esc(String(ME))}</code>`:'brak loginu'}): ${linkOk==='1'?'✅ potwierdzone':(linkOk==='0'?'⛔ NIEUDANE — pushe „trafiłeś wynik" Cię ominą':'❔ nieznane (kliknij niżej)')}
+          6. ${linkLine}
           <br><button class="icon-btn mini" style="margin-top:6px" onclick="relinkAccount()">🔗 Wymuś powiązanie konta</button>
           ${!optedIn?`<br><button class="icon-btn mini" style="margin-top:6px" onclick="askPush();setTimeout(updatePushDiag,2500)">Włącz teraz i odśwież status</button>`:''}
           <br><button class="icon-btn mini" style="margin-top:6px" onclick="queueTestPush()">🧪 Wyślij testowy push przez automat</button>
@@ -645,15 +656,30 @@ async function relinkAccount(){
       try{ localStorage.setItem('typer_link_ok','0'); }catch(e2){}
       flash('Powiązanie nieudane: '+((e&&e.message)||e));
     }
-    updatePushDiag();
+    updatePushDiag('pushdiag'); updatePushDiag('pushdiagP',true);
   });
+}
+function withTimeout(promise,ms,label){
+  return Promise.race([
+    promise,
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout:'+label)),ms))
+  ]);
 }
 async function askPush(){
   if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){flash('Powiadomienia jeszcze nie skonfigurowane przez admina.');return;}
   if(!window.OneSignalDeferred){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
+  flash('Sprawdzam ustawienia powiadomień…');
   OneSignalDeferred.push(async function(OneSignal){
     try{
-      await OneSignal.Notifications.requestPermission();      // nic nie robi, jeśli zgoda już jest
+      try{
+        await withTimeout(OneSignal.Notifications.requestPermission(),8000,'requestPermission');      // nic nie robi, jeśli zgoda już jest
+      }catch(e){
+        if(String((e&&e.message)||'').indexOf('timeout')===0){
+          flash('Przeglądarka nie pokazała okna zgody. Sprawdź małą ikonkę 🔔/🔒 przy adresie strony i kliknij tam „Zezwól", potem odśwież stronę i spróbuj ponownie.');
+          return;
+        }
+        throw e;
+      }
       if(!OneSignal.Notifications.permission){
         const st=(typeof Notification!=='undefined')?Notification.permission:'?';
         if(st==='denied')alert('Przeglądarka BLOKUJE powiadomienia dla tej strony.\n\nOdblokuj: stuknij ikonę obok adresu (kłódka/suwaki) → Uprawnienia → Powiadomienia → Zezwól — i kliknij dzwonek ponownie.');
@@ -671,6 +697,7 @@ async function askPush(){
       }
       try{ localStorage.setItem('typer_link_ok', linkOk?'1':'0'); }catch(e){}
       flash(linkOk?'Powiadomienia włączone dla tej ligi 🔔':'Powiadomienia włączone, ale powiązanie z Twoim kontem nie powiodło się — sprawdź diagnostykę i kliknij „Wymuś powiązanie".');
+      updatePushDiag('pushdiag'); updatePushDiag('pushdiagP',true);
     }catch(e){
       flash('Błąd powiadomień: '+((e&&e.message)||e));
     }
@@ -2093,9 +2120,11 @@ function showProfile(pid){
       return `<div style="margin-top:14px"><b style="font-size:13px">Do zdobycia:</b>${prog.map(b=>`<div class="bprog-row"><span style="width:22px">${b.e}</span><span class="bn">${esc(b.n)}</span><div class="bprog-bar"><div class="bprog-fill" style="width:${Math.min(100,Math.round(b.cur/b.goal*100))}%"></div></div><span class="bprog-num">${b.cur}/${b.goal}</span></div>`).join('')}
       <button class="icon-btn mini" style="margin-top:8px" onclick="showBadgeCatalog('${pid}')">Wszystkie odznaki (${BADGE_CATALOG.length}) ›</button></div>`;
     })()}
+    ${pid===ME?`<div class="card" id="pushdiagP" style="margin-top:16px;font-size:13px;line-height:1.6">🔔 Sprawdzam stan powiadomień…</div>`:''}
     ${pid===ME?`<button class="primary" style="margin-top:16px;width:100%" onclick="shareCard()">📤 Udostępnij swój wynik</button>`:''}
   </div></div>`;
   const d=document.createElement('div'); d.id='profileModal'; d.innerHTML=html; document.body.appendChild(d);
+  if(pid===ME) updatePushDiag('pushdiagP', true);
 }
 function closeProfile(){const m=$('profileModal');if(m)m.remove();}
 function toggleEmojiGrid(){const g=$('emogrid');if(g)g.style.display=(g.style.display==='none'?'grid':'none');}
