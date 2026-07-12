@@ -336,7 +336,12 @@ window.OneSignalDeferred = window.OneSignalDeferred || [];
 if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')!==0){
   OneSignalDeferred.push(async function(OneSignal){
     await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/'} });
-    try{ if(typeof ME!=='undefined' && ME) await OneSignal.login(String(ME)); }catch(e){}
+    try{
+      if(typeof ME!=='undefined' && ME){
+        try{ await OneSignal.login(String(ME)); }
+        catch(e){ console.warn('OneSignal.login (init) nieudany, ponawiam za 1.5s:',e); await new Promise(r=>setTimeout(r,1500)); try{ await OneSignal.login(String(ME)); }catch(e2){ console.warn('OneSignal.login (init, 2. próba) nieudany:',e2); } }
+      }
+    }catch(e){}
   });
 }
 </script>
@@ -602,12 +607,15 @@ function updatePushDiag(){
         const sub=OneSignal.User&&OneSignal.User.PushSubscription;
         const optedIn=!!(sub&&sub.optedIn);
         const id=(sub&&sub.id)||null;
+        const linkOk=(function(){try{return localStorage.getItem('typer_link_ok');}catch(e){return null;}})();
         el.innerHTML=`<b>🔔 Diagnostyka powiadomień (to urządzenie):</b><br>
           1. Zgoda przeglądarki: ${perm?'✅ jest':((typeof Notification!=='undefined'&&Notification.permission==='denied')?'⛔ ZABLOKOWANA w ustawieniach strony (kłódka obok adresu → Powiadomienia → Zezwól)':'❌ brak — kliknij dzwonek i zezwól')}<br>
           2. Subskrypcja TEJ ligi: ${optedIn?'✅ aktywna':'❌ NIEAKTYWNA'}<br>
           3. ID subskrypcji: ${id?`<code style="font-size:10px">${id}</code>`:'—'}<br>
           4. Service workery: <code style="font-size:10px">${scopes.join(' · ')||'brak'}</code><br>
-          5. App ID ligi: <code style="font-size:10px">${ONESIGNAL_APP_ID}</code>
+          5. App ID ligi: <code style="font-size:10px">${ONESIGNAL_APP_ID}</code><br>
+          6. Powiązanie z kontem (${typeof ME!=='undefined'&&ME?`<code style="font-size:10px">${esc(String(ME))}</code>`:'brak loginu'}): ${linkOk==='1'?'✅ potwierdzone':(linkOk==='0'?'⛔ NIEUDANE — pushe „trafiłeś wynik" Cię ominą':'❔ nieznane (kliknij niżej)')}
+          <br><button class="icon-btn mini" style="margin-top:6px" onclick="relinkAccount()">🔗 Wymuś powiązanie konta</button>
           ${!optedIn?`<br><button class="icon-btn mini" style="margin-top:6px" onclick="askPush();setTimeout(updatePushDiag,2500)">Włącz teraz i odśwież status</button>`:''}
           <br><button class="icon-btn mini" style="margin-top:6px" onclick="queueTestPush()">🧪 Wyślij testowy push przez automat</button>
           <br><button class="icon-btn mini" style="margin-top:6px" onclick="updatePushDiag()">↻ Odśwież status</button>
@@ -625,6 +633,21 @@ function updatePushDiag(){
     else el.innerHTML='❌ SDK OneSignal nie załadował się (blokada skryptów / adblock?).<br>Service workery: '+((scopes.join(' · '))||'brak');
   });
 }
+async function relinkAccount(){
+  if(!window.OneSignalDeferred){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
+  if(typeof ME==='undefined'||!ME){flash('Zaloguj się najpierw jako uczestnik.');return;}
+  OneSignalDeferred.push(async function(OneSignal){
+    try{
+      await OneSignal.login(String(ME));
+      try{ localStorage.setItem('typer_link_ok','1'); }catch(e){}
+      flash('Konto powiązane ✅ — trafienia dokładne powinny teraz do Ciebie docierać.');
+    }catch(e){
+      try{ localStorage.setItem('typer_link_ok','0'); }catch(e2){}
+      flash('Powiązanie nieudane: '+((e&&e.message)||e));
+    }
+    updatePushDiag();
+  });
+}
 async function askPush(){
   if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')===0){flash('Powiadomienia jeszcze nie skonfigurowane przez admina.');return;}
   if(!window.OneSignalDeferred){flash('Powiadomienia się ładują, spróbuj za chwilę.');return;}
@@ -638,8 +661,16 @@ async function askPush(){
         return;
       }
       await OneSignal.User.PushSubscription.optIn();          // właściwy zapis do TEJ apki (zgoda to za mało)
-      try{ await OneSignal.login(String(ME)); }catch(e){}
-      flash('Powiadomienia włączone dla tej ligi 🔔');
+      let linkOk=false;
+      try{ await OneSignal.login(String(ME)); linkOk=true; }
+      catch(e){
+        console.warn('OneSignal.login nieudany, ponawiam za 1.5s:',e);
+        await new Promise(r=>setTimeout(r,1500));
+        try{ await OneSignal.login(String(ME)); linkOk=true; }
+        catch(e2){ console.warn('OneSignal.login (2. próba) nieudany:',e2); }
+      }
+      try{ localStorage.setItem('typer_link_ok', linkOk?'1':'0'); }catch(e){}
+      flash(linkOk?'Powiadomienia włączone dla tej ligi 🔔':'Powiadomienia włączone, ale powiązanie z Twoim kontem nie powiodło się — sprawdź diagnostykę i kliknij „Wymuś powiązanie".');
     }catch(e){
       flash('Błąd powiadomień: '+((e&&e.message)||e));
     }
