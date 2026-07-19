@@ -1277,6 +1277,8 @@ function renderAdmin(){
       <input id="arc_name" value="${esc(CFG.leagueName||'')}">
       <button class="danger" style="width:100%;margin-top:10px" onclick="archiveTournament()">🏁 Zakończ i zarchiwizuj turniej</button>
       <div class="hint" style="margin-top:6px">Zapisuje edycję w historii i czyści planszę. Nowy turniej skonfigurujesz osobno — od razu albo za pół roku.</div>
+      ${Object.keys(ARCHIVE).length?`<button class="icon-btn" style="width:100%;margin-top:10px" onclick="restoreLastArchive()">↩️ Cofnij ostatnią archiwizację</button>
+      <div class="hint" style="margin-top:4px">Przywróci mecze, typy i punkty startowe sprzed ostatniej archiwizacji. Czatu i strzałek ruchu nie przywróci (nie były zapisywane w archiwum).</div>`:''}
       <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
         <b style="font-size:13px">🆕 Rozpocznij nowy turniej (na czystej planszy):</b>
         <label style="margin-top:8px">Nazwa turnieju (podtytuł w nagłówku)</label>
@@ -1359,6 +1361,27 @@ function saveChampion(){
 }
 function changeAdm(){const v=$('newadm').value.trim();if(v.length<4){alert('Min. 4 znaki.');return;}db.ref('config/adminPassword').set(v).then(()=>flash('Hasło zmienione'));}
 function flash(t){const d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2E9E5B;color:#fff;padding:10px 18px;border-radius:20px;font-weight:600;z-index:99;font-size:14px';document.body.appendChild(d);setTimeout(()=>d.remove(),1500);}
+function restoreLastArchive(){
+  const arcs=Object.entries(ARCHIVE||{}).map(([id,a])=>({id,...a})).sort((a,b)=>b.archivedAt-a.archivedAt);
+  if(!arcs.length){alert('Brak zarchiwizowanych turniejów.');return;}
+  const arc=arcs[0];
+  const date=new Date(arc.archivedAt).toLocaleString('pl-PL');
+  if(!confirm(`Cofnąć archiwizację „${arc.name}" (${date})?\n\nPrzywrócone zostaną: mecze, typy, wybory i rozstrzygnięcie mistrza turnieju, oryginalne punkty startowe graczy.\n\nNIE wrócą: czat i strzałki ruchu w tabeli (nie były zapisane w archiwum) — to trwała strata, niezależna od tego przycisku.\n\nUWAGA: jeśli na obecnej planszy zdążyłeś już coś dodać (nowe mecze/typy), zostanie to NADPISANE i skasowane.\n\nKontynuować?`))return;
+  if(!confirm('Na pewno? Tej operacji też nie da się cofnąć.'))return;
+  const upd={};
+  Object.entries(arc.participants||{}).forEach(([pid,p])=>{
+    if(PART[pid])upd['participants/'+pid+'/start']=Number(p.start||0);
+  });
+  Promise.all([
+    db.ref('matches').set(arc.matches||null),
+    db.ref('predictions').set(arc.predictions||null),
+    db.ref('champ').set(arc.champPicks||null),
+    db.ref('config/champion').set(arc.champion||null),
+    Object.keys(upd).length?db.ref().update(upd):Promise.resolve(),
+    db.ref('archive/'+arc.id).remove()
+  ]).then(()=>flash('Turniej przywrócony ↩️'))
+    .catch(e=>alert(dbErrMsg(e)));
+}
 function archiveTournament(){
   const name=($('arc_name').value||'').trim()||CFG.leagueName||'Turniej';
   if(!Object.keys(PART).length){alert('Brak uczestników do zarchiwizowania.');return;}
