@@ -335,12 +335,7 @@ const ONESIGNAL_APP_ID='b71033e4-8af0-4305-bf76-96da9d26d6c2';
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 if(ONESIGNAL_APP_ID.indexOf('TU_WKLEJ')!==0){
   OneSignalDeferred.push(async function(OneSignal){
-    try{
-      await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'Liga/Jysk/OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/Jysk/'} });
-    }catch(initErr){
-      console.error('OneSignal.init nieudany:', initErr);
-      setTimeout(()=>{ if(typeof flash==='function') flash('❌ OneSignal.init błąd: '+((initErr&&initErr.message)||initErr)); }, 800);
-    }
+    await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton:{enable:false}, serviceWorkerPath:'OneSignalSDKWorker.js', serviceWorkerParam:{scope:'/Liga/'} });
     try{
       if(typeof ME!=='undefined' && ME){
         try{ await OneSignal.login(String(ME)); }
@@ -2905,7 +2900,7 @@ function showHistory(){
   const archives=Object.entries(ARCHIVE).map(([id,a])=>({id,...a})).sort((a,b)=>b.archivedAt-a.archivedAt);
   const allTime={};
   archives.forEach(arc=>{
-    const sc=(arc.standingsClassic||[]).slice().sort((a,b)=>b.total-a.total);
+    const sc=(arc.standingsKicktipp||[]).slice().sort((a,b)=>b.total-a.total);
     sc.forEach((r,i)=>{
       const key=r.name;
       allTime[key]=allTime[key]||{name:r.name,total:0,tournaments:0,wins:0};
@@ -2922,7 +2917,7 @@ function showHistory(){
       <div class="pts">${r.total}<small>PKT</small></div>
     </div>`).join('')}</div>`:`<div class="muted center" style="padding:14px 0">Ranking wszech czasów pojawi się po zarchiwizowaniu pierwszego turnieju.</div>`;
   const archivesHtml=archives.length?archives.map(arc=>{
-    const sc=(arc.standingsClassic||[]).slice().sort((a,b)=>b.total-a.total);
+    const sc=(arc.standingsKicktipp||[]).slice().sort((a,b)=>b.total-a.total);
     const medals=['🥇','🥈','🥉'];
     const podium=sc.slice(0,3).map((r,i)=>`<div class="prow"><span class="nm">${medals[i]} ${esc(r.name)}</span><span class="muted">${r.total} pkt</span></div>`).join('');
     const fullRows=sc.map((r,i)=>`<div class="prow"><span class="nm">${i+1}. ${esc(r.name)}</span><span class="muted">${r.total} pkt</span></div>`).join('');
@@ -2939,9 +2934,9 @@ function showHistory(){
   // 🏛️ Rekordy wszech czasów
   let recPts=null,recExact=null,recBadges=null;const champHits=[];
   archives.forEach(arc=>{
-    (arc.standingsClassic||[]).forEach(r=>{
+    (arc.standingsKicktipp||[]).forEach(r=>{
       if(!recPts||r.total>recPts.v)recPts={v:r.total,name:r.name,t:arc.name};
-      const ex=Number(r.correct||0);
+      const ex=Number(r.exact||0);
       if(!recExact||ex>recExact.v)recExact={v:ex,name:r.name,t:arc.name};
     });
     Object.entries(arc.badges||{}).forEach(([pid,bb])=>{
