@@ -1019,6 +1019,7 @@ function regulaminCard(){
       <b>Typowanie.</b> Typujesz dokładny wynik po 90 minutach — dogrywka i rzuty karne nie liczą się do wyniku. Typ zapisujesz raz i nie można go zmienić. Typowanie meczu zamyka się o pierwszym gwizdku. Typy innych graczy ${CFG.showBeforeKickoff?'są widoczne od razu':'zobaczysz dopiero po gwizdku'}.<br><br>
       <b>Klasyfikacja klasyczna.</b> 1 pkt za dokładnie trafiony wynik + punkty startowe (dorobek sprzed apki).<br><br>
       <b>Klasyfikacja Kicktipp.</b> 3 pkt za dokładny wynik, 1 pkt za trafiony rezultat (zwycięzca lub remis) + punkty startowe.<br><br>
+      <b>🏆 Zwycięzca ligi.</b> O końcowym podium i tytule mistrza ligi decyduje wyłącznie <b>klasyfikacja Kicktipp</b> — kto zbierze w niej najwięcej punktów, ten wygrywa turniej. W przypadku remisu punktowego wyżej klasyfikuje się osoba z większą liczbą dokładnie trafionych wyników. Klasyfikacja klasyczna ma charakter pomocniczy/informacyjny.<br><br>
       <b>⭐ Joker.</b> Raz na każdy etap możesz przy zapisie typu postawić Jokera — punkty za ten mecz liczą się ×2 w obu klasyfikacjach. Joker jest nieodwołalny jak typ.<br><br>
       <b>🏆 Mistrz turnieju.</b> Wytypowanie zwycięzcy całego turnieju to +${champPtsVal()} pkt w obu klasyfikacjach. ${dl?`Typowanie mistrza zamyka się ${fmt(dl)}.`:''} Rozstrzygnięcie po finale.<br><br>
       <b>🎖️ Mistrz rundy.</b> Po każdym zakończonym etapie najlepszy typer rundy (punkty Kicktipp w obrębie etapu, przy remisie liczba dokładnych) dostaje emblemat przy nazwisku.
@@ -2249,7 +2250,7 @@ function roundReportText(){
   const top=lr.rank.filter(x=>x[1]>0)[0];
   let climber=null,cval=0,faller=null,fval=0;
   Object.keys(PART).forEach(p=>{const d=(before[p]||now[p])-now[p];if(d>cval){cval=d;climber=p;}if(d<fval){fval=d;faller=p;}});
-  const lead=standings()[0];
+  const lead=kicktippStandings()[0];
   let t=`📋 Raport po rundzie — ${lr.stage}\n`;
   if(top)t+=`🥇 Najlepszy: ${nm(top[0])} (${top[1]} pkt w rundzie)\n`;
   if(climber&&cval>0)t+=`📈 Skok rundy: ${nm(climber)} (awans o ${cval})\n`;
@@ -2971,7 +2972,7 @@ function showHistory(){
 }
 window.showHistory=showHistory;
 function showPodium(){
-  const s=standings();
+  const s=kicktippStandings();
   if(!s.length)return;
   const medals=['🥇','🥈','🥉'];
   const emojis=['🏆','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'];
@@ -3003,7 +3004,7 @@ function showPodium(){
 
   const totalDone=Object.values(MATCH).filter(m=>m.done).length;
   const topPred=s[0];
-  const topExact=topPred?topPred.correct:0;
+  const topExact=topPred?topPred.exact:0;
 
   const ov=document.createElement('div');
   ov.className='podium-ovl';
