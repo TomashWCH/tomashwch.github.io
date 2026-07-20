@@ -379,7 +379,7 @@ const db = firebase.database();
 
 /* ---------- Teams: code -> {pl, flag, elo} ---------- */
 const HOSTS={USA:1,MEX:1,CAN:1};
-const TEAMS={
+const BASE_TEAMS={
  ARG:{pl:"Argentyna",f:"🇦🇷",e:2100}, FRA:{pl:"Francja",f:"🇫🇷",e:2080}, ESP:{pl:"Hiszpania",f:"🇪🇸",e:2070},
  BRA:{pl:"Brazylia",f:"🇧🇷",e:2040}, ENG:{pl:"Anglia",f:"🇬🇧",e:2010}, POR:{pl:"Portugalia",f:"🇵🇹",e:1990},
  ITA:{pl:"Włochy",f:"🇮🇹",e:1980}, NED:{pl:"Holandia",f:"🇳🇱",e:1970}, GER:{pl:"Niemcy",f:"🇩🇪",e:1960},
@@ -398,9 +398,35 @@ const TEAMS={
  CPV:{pl:"Zielony Przyl.",f:"🇨🇻",e:1600}, NZL:{pl:"Nowa Zelandia",f:"🇳🇿",e:1560},
  CZE:{pl:"Czechy",f:"🇨🇿",e:1750}, HAI:{pl:"Haiti",f:"🇭🇹",e:1650}, SCO:{pl:"Szkocja",f:"🇬🇧",e:1770}, CUW:{pl:"Curacao",f:"🇨🇼",e:1610}
 };
-function team(c){return TEAMS[c]||{pl:c,f:"⚽",e:1650};}
+function allTeams(){return Object.assign({},BASE_TEAMS,(CFG&&CFG.customTeams)||{});}
+function team(c){return allTeams()[c]||{pl:c,f:"⚽",e:1650};}
+function tournamentYear(){const y=Number(CFG&&CFG.tournamentYear);return isFinite(y)&&y>2000?y:TOURNAMENT_YEAR;}
+function resultsApiUrl(){return (CFG&&CFG.resultsApi&&CFG.resultsApi.trim())||RESULTS_API||'';}
 
-/* ---------- Seed fixtures (World Cup 2026) ---------- */
+/* ============================================================
+   USTAWIENIA TURNIEJU — to jedyne miejsce do edycji przy starcie
+   kolejnej edycji (Euro, następne MŚ, itd.). Reszta apki (import
+   dat, pobieranie wyników z internetu) korzysta z tych stałych,
+   więc nie trzeba już nic szukać dalej w kodzie.
+   ============================================================ */
+const TOURNAMENT_YEAR = 2026;
+// Rok turnieju — używany przy szybkim dodawaniu meczów w formacie
+// "KOD1-KOD2 DD.MM GG:MM Etap" (bez roku) oraz jako domyślny rok w nazwach.
+const RESULTS_API = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
+// Źródło automatycznego pobierania wyników (openfootball, dane publiczne).
+// PRZED KOLEJNYM TURNIEJEM: sprawdź na https://github.com/openfootball czy
+// istnieje pasujący zbiór (np. euro.json dla mistrzostw Europy) i podmień
+// powyższy URL + w razie potrzeby listę drużyn w API_TEAM (niżej w kodzie).
+// Jeśli nie znajdziesz pasującego źródła albo format danych się różni,
+// przycisk "Pobierz wyniki z internetu" po prostu pokaże błąd — wyniki
+// zawsze można wpisać ręcznie (pojedynczo albo hurtowym importem).
+
+/* ---------- Seed fixtures (World Cup 2026) ----------
+   Startowa lista meczów wgrywana automatycznie przy pierwszym
+   uruchomieniu nowej bazy (patrz maybeSeed()). Przed kolejnym
+   turniejem podmień całą zawartość SEED i KNOCK na mecze nowej
+   edycji (albo zostaw puste tablice i dodawaj mecze ręcznie
+   przez panel administratora / hurtowy import). */
 const SEED=[
  {id:'m01',home:'PAN',away:'ENG',iso:'2026-06-27T21:00:00Z',stage:'Faza grupowa',pH:5.5,pD:11,pA:83.5},
  {id:'m02',home:'CRO',away:'GHA',iso:'2026-06-27T21:00:00Z',stage:'Faza grupowa',pH:51.6,pD:29.3,pA:19.1},
@@ -454,9 +480,11 @@ let H2H_A=null, H2H_B=null;
 const EXP=new Set();
 const PHASE_EXP=new Set();
 let adminPartOpen=false;
+let adminTeamsOpen=false;
 const adminExpMatches=new Set();
 const adminPhaseExp=new Set();
 function toggleAdminPart(){adminPartOpen=!adminPartOpen;render();}
+function toggleAdminTeams(){adminTeamsOpen=!adminTeamsOpen;render();}
 function toggleAdminMatch(mid){if(adminExpMatches.has(mid))adminExpMatches.delete(mid);else adminExpMatches.add(mid);render();}
 function toggleAdminPhase(st){if(adminPhaseExp.has(st))adminPhaseExp.delete(st);else adminPhaseExp.add(st);render();}
 let FEED_OPEN=false;
@@ -1071,7 +1099,14 @@ function renderAdmin(){
       <button class="danger" onclick="delPart('${pid}')">Usuń</button>
     </div>`).join('') || `<div class="muted">Brak uczestników — dodaj 8 osób poniżej.</div>`;
 
-  const teamOpts=Object.keys(TEAMS).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl'))
+  const customTeams=(CFG.customTeams)||{};
+  const tlist=Object.entries(customTeams).map(([code,t])=>`
+    <div class="listitem">
+      <div class="g"><b>${esc(t.f||'⚽')} ${esc(t.pl||code)}</b><div class="muted">kod: ${esc(code)} · siła: ${Number(t.e)||1650}${BASE_TEAMS[code]?' · nadpisuje wbudowaną':''}</div></div>
+      <button class="danger" onclick="delCustomTeam('${code}')">Usuń</button>
+    </div>`).join('') || `<div class="muted">Brak dodanych reprezentacji — na razie korzystasz z wbudowanej listy ${Object.keys(BASE_TEAMS).length} drużyn.</div>`;
+
+  const teamOpts=Object.keys(allTeams()).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl'))
     .map(c=>`<option value="${c}">${team(c).pl}</option>`).join('');
 
   const matchRow=(m)=>{
@@ -1148,6 +1183,23 @@ function renderAdmin(){
           <input id="np_st" type="number" placeholder="Pkt startowe" value="0">
         </div>
         <button class="primary" onclick="addPart()">Dodaj</button>
+      </div>
+    </div>`:''}
+
+    <div class="sec-h toggle-h" onclick="toggleAdminTeams()"><span>Reprezentacje (${Object.keys(customTeams).length} własnych)</span><span class="chev">${adminTeamsOpen?'zwiń ⌃':'rozwiń ⌄'}</span></div>
+    ${adminTeamsOpen?`<div class="card">
+      <div class="hint" style="margin-bottom:10px">Wbudowana lista ma ${Object.keys(BASE_TEAMS).length} reprezentacji (MŚ 2026). Brakującą drużynę (np. na Euro) dodaj tutaj — od razu pojawi się w wyborze drużyn przy meczach. Jeśli wpiszesz kod, który już jest wbudowany, Twoja wersja go nadpisze.</div>
+      ${tlist}
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+        <label>Dodaj reprezentację</label>
+        <div class="row2">
+          <input id="nt_code" placeholder="Kod (np. WAL)" maxlength="3" style="text-transform:uppercase">
+          <input id="nt_flag" placeholder="Flaga (emoji, np. 🏴󠁧󠁢󠁷󠁬󠁳󠁿)">
+        </div>
+        <input id="nt_name" placeholder="Nazwa po polsku (np. Walia)" style="margin-top:8px">
+        <input id="nt_e" type="number" placeholder="Siła drużyny (np. 1780)" value="1650" style="margin-top:8px">
+        <button class="primary" style="margin-top:8px" onclick="addCustomTeam()">Dodaj reprezentację</button>
+        <div class="hint">Siła to punktacja w stylu Elo — wpływa tylko na wyświetlany szacunkowy % szans przed meczem, nie na punktację. Aktualne wartości znajdziesz na <a href="https://www.eloratings.net" target="_blank" rel="noopener">eloratings.net</a> — albo napisz do Claude, żeby zebrał je za Ciebie dla całej stawki.</div>
       </div>
     </div>`:''}
 
@@ -1243,6 +1295,12 @@ function renderAdmin(){
       <div class="row2"><input id="lname" value="${esc(CFG.leagueName||'LIGA TYPERA JYSK')}"><button class="icon-btn" onclick="saveName()">Zapisz</button></div>
       <label style="margin-top:14px">Podtytuł (nazwa turnieju w nagłówku)</label>
       <div class="row2"><input id="lsub" value="${esc(CFG.subtitle||'TYPER MUNDIAL 2026')}"><button class="icon-btn" onclick="saveSub()">Zapisz</button></div>
+      <label style="margin-top:14px">Rok turnieju</label>
+      <div class="row2"><input id="tyear" type="number" value="${tournamentYear()}"><button class="icon-btn" onclick="saveTournamentYear()">Zapisz</button></div>
+      <div class="hint">Używany przy szybkim dodawaniu meczów (format DD.MM bez roku) i jako domyślny rok w tekstach.</div>
+      <label style="margin-top:14px">Źródło wyników (URL)</label>
+      <div class="row2"><input id="rapi" value="${esc(CFG.resultsApi||'')}" placeholder="${esc(RESULTS_API)}"><button class="icon-btn" onclick="saveResultsApi()">Zapisz</button></div>
+      <div class="hint">Puste pole = domyślny adres wpisany w kodzie apki (obecnie dane MŚ 2026 z openfootball). Przed kolejnym turniejem wklej tu nowy adres — bez edycji pliku.</div>
       <label style="margin-top:14px">🤖 Automatyczne wpisywanie wyników</label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;text-transform:none;letter-spacing:0;cursor:pointer">
         <input type="checkbox" style="width:auto" ${CFG.autoResults?'checked':''} onchange="db.ref('config/autoResults').set(this.checked||null).then(()=>flash(this.checked?'Auto-wyniki włączone 🤖':'Auto-wyniki wyłączone')).catch(e=>alert(dbErrMsg(e)))">
@@ -1259,7 +1317,7 @@ function renderAdmin(){
       <div class="row2"><input id="champpts" type="number" min="1" value="${champPtsVal()}"><button class="icon-btn" onclick="saveChampPts()">Zapisz</button></div>
       <label style="margin-top:10px">Rozstrzygnięcie (kto został mistrzem)</label>
       <div class="row2">
-        <select id="champres"><option value="">— nie rozstrzygnięto —</option>${Object.keys(TEAMS).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl')).map(c=>`<option value="${c}" ${CFG.champion===c?'selected':''}>${team(c).pl}</option>`).join('')}</select>
+        <select id="champres"><option value="">— nie rozstrzygnięto —</option>${Object.keys(allTeams()).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl')).map(c=>`<option value="${c}" ${CFG.champion===c?'selected':''}>${team(c).pl}</option>`).join('')}</select>
         <button class="icon-btn" onclick="saveChampion()">Zapisz</button>
       </div>
       <div class="hint">Ustaw po finale — każdy, kto trafił mistrza, dostanie +${champPtsVal()} pkt w obu klasyfikacjach. Typów oddano: ${Object.keys(CHAMP).filter(p=>PART[p]).length}/${Object.keys(PART).length}.</div>
@@ -1282,6 +1340,10 @@ function renderAdmin(){
         <b style="font-size:13px">🆕 Rozpocznij nowy turniej (na czystej planszy):</b>
         <label style="margin-top:8px">Nazwa turnieju (podtytuł w nagłówku)</label>
         <input id="ne_sub" placeholder="np. TYPER LIGA MISTRZÓW 2026/27">
+        <label style="margin-top:8px">Rok turnieju</label>
+        <input id="ne_year" type="number" value="${tournamentYear()}">
+        <label style="margin-top:8px">Źródło wyników (URL, opcjonalnie)</label>
+        <input id="ne_api" value="" placeholder="zostaw puste, jeśli jeszcze nie wiesz">
         <label style="margin-top:8px">Punkty za trafionego mistrza</label>
         <input id="ne_pts" type="number" min="1" value="${champPtsVal()}">
         <label style="margin-top:8px">Termin typowania mistrza (puste = pierwszy gwizdek)</label>
@@ -1341,6 +1403,30 @@ function importKnock(){
 function toggleShow(){db.ref('config/showBeforeKickoff').set(!CFG.showBeforeKickoff);}
 function saveName(){db.ref('config/leagueName').set($('lname').value.trim()||'LIGA TYPERA JYSK').then(()=>flash('Zapisano'));}
 function saveSub(){db.ref('config/subtitle').set($('lsub').value.trim()||'TYPER').then(()=>flash('Zapisano'));}
+function saveTournamentYear(){
+  const y=Number($('tyear').value);
+  if(!isFinite(y)||y<2000||y>2100){alert('Podaj poprawny rok, np. 2028.');return;}
+  db.ref('config/tournamentYear').set(y).then(()=>flash('Zapisano')).catch(e=>alert(dbErrMsg(e)));
+}
+function saveResultsApi(){
+  const v=$('rapi').value.trim();
+  db.ref('config/resultsApi').set(v||null).then(()=>flash('Zapisano')).catch(e=>alert(dbErrMsg(e)));
+}
+function addCustomTeam(){
+  let code=($('nt_code').value||'').trim().toUpperCase();
+  const name=($('nt_name').value||'').trim();
+  const flag=($('nt_flag').value||'').trim()||'⚽';
+  const e=Number($('nt_e').value);
+  if(!/^[A-Z]{3}$/.test(code)){alert('Kod drużyny to dokładnie 3 litery, np. WAL.');return;}
+  if(!name){alert('Podaj nazwę reprezentacji.');return;}
+  if(!isFinite(e)||e<1000||e>2500){alert('Podaj sensowną siłę drużyny (np. 1000–2500).');return;}
+  db.ref('config/customTeams/'+code).set({pl:name,f:flag,e:Math.round(e)}).then(()=>{
+    flash('Dodano reprezentację ✅');
+    ['nt_code','nt_name','nt_flag'].forEach(id=>{if($(id))$(id).value='';});
+    if($('nt_e'))$('nt_e').value=1650;
+  }).catch(e=>alert(dbErrMsg(e)));
+}
+function delCustomTeam(code){if(confirm('Usunąć reprezentację '+code+' z listy własnych?'))db.ref('config/customTeams/'+code).remove().catch(e=>alert(dbErrMsg(e)));}
 function saveRulesNote(){db.ref('config/rulesNote').set($('lrules').value.trim()||null).then(()=>flash('Zapisano'));}
 function saveChampDl(){
   const v=$('champdl').value;
@@ -1413,11 +1499,15 @@ function startNewEdition(){
   const sub=($('ne_sub')&&$('ne_sub').value.trim())||'';
   const pts=Number(($('ne_pts')&&$('ne_pts').value)||0);
   const dl=($('ne_dl')&&$('ne_dl').value)||'';
+  const year=Number(($('ne_year')&&$('ne_year').value)||0);
+  const api=($('ne_api')&&$('ne_api').value.trim())||'';
   if(!sub){alert('Podaj nazwę nowego turnieju.');return;}
   if(Object.keys(MATCH).length&&!confirm('Uwaga: na planszy są jeszcze mecze z poprzednich rozgrywek ('+Object.keys(MATCH).length+').\nJeśli to koniec starego turnieju — najpierw go zarchiwizuj.\n\nMimo to ustawić nowy turniej?'))return;
   if(!confirm('Rozpocząć nowy turniej „'+sub+'"?\nPunkty za mistrza: '+(pts>0?pts:champPtsVal())))return;
   const cfg={'config/subtitle':sub};
   if(pts>0)cfg['config/champPts']=pts;
+  if(year>2000&&year<2100)cfg['config/tournamentYear']=year;
+  cfg['config/resultsApi']=api||null;
   if(dl){const t=new Date(dl).getTime();if(!isNaN(t))cfg['config/champDeadline']=t;}
   else cfg['config/champDeadline']=null;
   cfg['config/champion']=null;
@@ -1502,7 +1592,7 @@ function champCard(){
   const locked=champLocked();
   const myPick=CHAMP[ME];
   if(!locked){
-    const teamOpts=Object.keys(TEAMS).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl'))
+    const teamOpts=Object.keys(allTeams()).sort((a,b)=>team(a).pl.localeCompare(team(b).pl,'pl'))
       .map(c=>`<option value="${c}" ${myPick===c?'selected':''}>${team(c).f} ${team(c).pl}</option>`).join('');
     return `<div class="card champ-card">
       <div class="champ-h">🏆 Kto zostanie mistrzem?<span class="champ-pts">+${champPtsVal()} PKT</span></div>
@@ -1670,7 +1760,7 @@ function addBulkResults(){
     if(!mtc){errs.push(line);return;}
     let [,h,a,hs,as,fh,fa,kh,ka]=mtc;
     h=h.toUpperCase();a=a.toUpperCase();
-    if(!TEAMS[h]||!TEAMS[a]){errs.push(line+'   ← nieznany kod drużyny');return;}
+    if(!allTeams()[h]||!allTeams()[a]){errs.push(line+'   ← nieznany kod drużyny');return;}
     const cands=Object.entries(MATCH).filter(([id,mm])=>!usedIds.has(id)&&((mm.home===h&&mm.away===a)||(mm.home===a&&mm.away===h)));
     if(!cands.length){errs.push(line+'   ← nie znalazłam meczu '+h+'-'+a);return;}
     cands.sort((x,y)=>(x[1].done===y[1].done?0:(x[1].done?1:-1))||x[1].kickoff-y[1].kickoff);
@@ -1703,13 +1793,14 @@ function addBulkResults(){
   }).catch(e=>alert(dbErrMsg(e)));
 }
 /* ---------- v8: automatyczne wyniki z internetu (openfootball, domena publiczna) ---------- */
-const RESULTS_API='https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const API_TEAM={'Algeria':'DZA','Argentina':'ARG','Australia':'AUS','Austria':'AUT','Belgium':'BEL','Bosnia & Herzegovina':'BIH','Brazil':'BRA','Canada':'CAN','Cape Verde':'CPV','Colombia':'COL','Croatia':'CRO','Curaçao':'CUW','Czech Republic':'CZE','DR Congo':'COD','Ecuador':'ECU','Egypt':'EGY','England':'ENG','France':'FRA','Germany':'GER','Ghana':'GHA','Haiti':'HAI','Iran':'IRN','Iraq':'IRQ','Ivory Coast':'CIV','Japan':'JPN','Jordan':'JOR','Mexico':'MEX','Morocco':'MAR','Netherlands':'NED','New Zealand':'NZL','Norway':'NOR','Panama':'PAN','Paraguay':'PAR','Portugal':'POR','Qatar':'QAT','Saudi Arabia':'KSA','Scotland':'SCO','Senegal':'SEN','South Africa':'RSA','South Korea':'KOR','Spain':'ESP','Sweden':'SWE','Switzerland':'SUI','Tunisia':'TUN','Turkey':'TUR','USA':'USA','Uruguay':'URU','Uzbekistan':'UZB'};
 async function fetchOnlineResults(){
+  const url=resultsApiUrl();
+  if(!url){alert('Brak skonfigurowanego źródła wyników.\nUstaw adres w Panel administratora → Ustawienia → „Źródło wyników" — albo wpisuj wyniki ręcznie.');return;}
   const btn=$('fetchres_btn'); if(btn){btn.disabled=true;btn.textContent='⏳ Pobieram…';}
   let data;
   try{
-    const r=await fetch(RESULTS_API+'?t='+Math.floor(Date.now()/60000));
+    const r=await fetch(url+'?t='+Math.floor(Date.now()/60000));
     if(!r.ok)throw new Error('HTTP '+r.status);
     data=await r.json();
   }catch(e){
@@ -2679,10 +2770,10 @@ function addBulk(){
     const gm=stage.match(/^(Faza grupowa)\s+([A-La-l])$/);
     if(gm){stage=gm[1];grp=gm[2].toUpperCase();}
     stage=canonStage(stage)||stage;
-    if(!TEAMS[h]||!TEAMS[a]||h===a||!date||!time||!/^\d{1,2}\.\d{1,2}$/.test(date)||!/^\d{1,2}:\d{2}$/.test(time)){errs.push(line);return;}
+    if(!allTeams()[h]||!allTeams()[a]||h===a||!date||!time||!/^\d{1,2}\.\d{1,2}$/.test(date)||!/^\d{1,2}:\d{2}$/.test(time)){errs.push(line);return;}
     const exists=Object.values(MATCH).some(mm=>(canonStage(mm.stage)||mm.stage)===stage&&((mm.home===h&&mm.away===a)||(mm.home===a&&mm.away===h)));
     if(exists){dupes.push(line);return;}
-    const dp=date.split('.'),iso='2026-'+dp[1].padStart(2,'0')+'-'+dp[0].padStart(2,'0')+'T'+time.padStart(5,'0');
+    const dp=date.split('.'),iso=tournamentYear()+'-'+dp[1].padStart(2,'0')+'-'+dp[0].padStart(2,'0')+'T'+time.padStart(5,'0');
     const k=new Date(iso).getTime(); if(isNaN(k)){errs.push(line);return;}
     const id=db.ref('matches').push().key; up['matches/'+id]={home:h,away:a,kickoff:k,stage,grp}; ok++;
   });
@@ -3034,7 +3125,7 @@ function showPodium(){
   ov.id='podiumScreen';
   ov.innerHTML=`
     <div class="podium-title">🏆 LIGA TYPERA</div>
-    <div class="podium-sub">FINAŁ · MŚ 2026 · JYSK JYSK</div>
+    <div class="podium-sub">FINAŁ · ${esc(CFG.subtitle||('MŚ '+TOURNAMENT_YEAR))} · ${esc(CFG.leagueName||'LIGA TYPERA')}</div>
     <div style="font-size:36px;margin-bottom:16px;animation:confettiBounce .6s ease-in-out infinite alternate">🎉</div>
 
     <div class="podium-stage">${podiumCols}</div>
